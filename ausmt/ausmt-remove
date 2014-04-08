@@ -8,43 +8,27 @@ APP_DIR=${1}
 
 PATCH_NAME=unified_diff.patch
 
-TWEAKS_NAME=tweaks_prefs.json
-
-BSPATCH_DIR=binary_patches
-
-FILES_DIR=files_additional
-
-PACKAGES_FILE=packages_cache.list
+# BSPATCH_DIR=binary_patches
 
 #
 # Here starts the part where all the magic happens
 #
 
-VERSION=ausmt-1
+VERSION=ausmt-sailfishos-1
 
-IPKG_INFO_DIR=/usr/lib/ipkg/info
-
-if [ -z "${IPKG_OFFLINE_ROOT}" ]; then
-  IPKG_OFFLINE_ROOT=/media/cryptofs/apps
-fi
-
-if [ -d ${APP_DIR}/files_replaceable ]; then
-  FILES_DIR=files_replaceable
-fi
-
-PATCH_LOG_FILE=/media/internal/webos-ausmt.log
-PATCH_CONTROL_DIR=/var/usr/lib/.webosinternals.patches
-PATCH_PACKAGES_LIST=/media/internal/.webosinternals.patches.packages
-
-TWEAKS_PREFERENCES_DIR=/media/cryptofs/apps/usr/palm/services/org.webosinternals.tweaks.prefs/preferences
+PATCH_LOG_FILE=/var/lib/patchmanager/ausmt/ausmt.log
+PATCH_CONTROL_DIR=/var/lib/patchmanager/ausmt/control
+PATCH_PACKAGES_LIST=/var/lib/patchmanager/ausmt/packages
+PATCH_CACHE_FILE=/var/lib/patchmanager/ausmt/packages.cache
 
 #
 # Required applications and their full execute paths
 #
 
-PATCH_EXEC=/var/usr/bin/patch
-LSDIFF_EXEC=/var/usr/bin/lsdiff
-BSPATCH_EXEC=/usr/bin/bspatch
+RPM_EXEC=/usr/bin/rpm
+PATCH_EXEC=/usr/bin/patch
+LSDIFF_EXEC=/usr/bin/lsdiff
+# BSPATCH_EXEC=/usr/bin/bspatch
 
 if [ -f /media/cryptofs/apps/usr/bin/patch ]; then
   PATCH_EXEC=/media/cryptofs/apps/usr/bin/patch
@@ -65,9 +49,9 @@ do_remove_failure() {
   echo "*** FAILED ***" | tee -a ${PATCH_LOG_FILE}
   echo | tee -a ${PATCH_LOG_FILE}
 
-  rm -f /var/webosinternals.cache >/dev/null 2>&1
+  rm -f $PATCH_CACHE_FILE >/dev/null 2>&1
 
-  mount -o ro,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
+#   mount -o ro,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
 
   exit 1
 }
@@ -77,9 +61,9 @@ do_remove_success() {
   echo "*** SUCCESS ***" | tee -a ${PATCH_LOG_FILE}
   echo | tee -a ${PATCH_LOG_FILE}
 
-  rm -f /var/webosinternals.cache >/dev/null 2>&1
+  rm -f $PATCH_CACHE_FILE >/dev/null 2>&1
 
-  mount -o ro,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
+#   mount -o ro,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
 
   exit 0
 }
@@ -99,8 +83,8 @@ get_palm_md5sum() {
 
   appid=`basename ${APP_DIR}`
 
-  if [ -f /var/webosinternals.cache ]; then
-    md5sums_line=`grep "^${file} " /var/webosinternals.cache`
+  if [ -f $PATCH_CACHE_FILE ]; then
+    md5sums_line=`grep "^${file} " $PATCH_CACHE_FILE`
 
     palm_md5sum=`echo ${md5sums_line} | awk '{print $2}'`
 
@@ -119,44 +103,14 @@ find_palm_md5sum() {
 
   echo "Finding md5sum for original file" >> ${PATCH_LOG_FILE}
   echo "  file: ${file}" >> ${PATCH_LOG_FILE}
-
-  check_packages_file
-
-  if [ ! -z "${md5sums_line}" ]; then
-    palm_md5sum=`echo ${md5sums_line} | awk '{print $1}'`
-
-    echo "Found md5sum via the packages file" >> ${PATCH_LOG_FILE}
-    echo "  md5sum: ${palm_md5sum}" >> ${PATCH_LOG_FILE}
-
-    echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>/var/webosinternals.cache
-  else
-    echo "File not found via packages file, checking cryptofs lists" >> ${PATCH_LOG_FILE}
-
-    check_cryptofs_lists
-
-    if [ ! -z "${md5sums_line}" ]; then
-      palm_md5sum=`echo ${md5sums_line} | awk '{print $1}'`
-
-      echo "Found md5sum from the cryptofs lists" >> ${PATCH_LOG_FILE}
-      echo "  md5sum: ${palm_md5sum}" >> ${PATCH_LOG_FILE}
-
-      echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>/var/webosinternals.cache
-    else
-      echo "File not found in cryptofs lists, checking system md5sum files" >> ${PATCH_LOG_FILE}
-
-      md5sums_line=`grep "*.${file}$" ${IPKG_INFO_DIR}/*.md5sums`
-
-      if [ ! -z "${md5sums_line}" ]; then
-        pkg_package=`echo ${md5sums_line} | cut -d ':' -f 1`
-
-        palm_md5sum=`echo ${md5sums_line} | cut -d ':' -f 2 | awk '{print $1}'`
-
-        echo "Found md5sum from md5sums files" >> ${PATCH_LOG_FILE}
-        echo "  md5sum: ${palm_md5sum}" >> ${PATCH_LOG_FILE}
-
-        echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>/var/webosinternals.cache
-      fi
-    fi
+  
+  # We change from Palm, and use rpm to query the MD5 (or SHA256) sum
+  pkg_package=$(${RPM_EXEC} -q --queryformat '%{NAME}' -f ${file} 2> /dev/null)
+  pkg_version=$(${RPM_EXEC} -q --queryformat '%{VERSION}-%{RELEASE}' -f ${file} 2> /dev/null)
+  palm_md5sum=$(${RPM_EXEC} -q --queryformat '[%{FILENAMES} %{FILEMD5S}\n]' -f ${file} | grep ${file} | awk '{print $2}' 2> /dev/null)
+  
+  if [ ! -z "${palm_md5sum}" ]; then
+    echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>$PATCH_CACHE_FILE
   fi
 }
 
@@ -174,34 +128,14 @@ check_packages_file() {
   fi
 }
 
-check_cryptofs_lists() {
-  file_line=`grep "^${file#${IPKG_OFFLINE_ROOT}}$" ${IPKG_OFFLINE_ROOT}/${IPKG_INFO_DIR}/*.list`
-
-  if [ ! -z "${file_line}" ]; then
-    get_bck_file
-
-    list_file=`echo "${file_line}" | cut -d ':' -f 1`
-
-    pkg_package=`basename ${list_file} .list`
-
-    control_file=`dirname ${list_file}`/${pkg_package}.control
-
-    pkg_version=`grep "^Version: " ${control_file} | awk '{print $2}'`
-
-    control_line=`grep "^${pkg_package} ${file} " ${PATCH_CONTROL_DIR}/file_control`
-
-    tmp_version=`echo ${control_line} | awk '{print $3}'`
-
-    if [ ! -f ${bck_file} ] || [ "${pkg_version}" != "${tmp_version}" ]; then
-      md5sums_line=`md5sum ${file} | awk '{print $1}'`" *.${file}"
-    else
-      md5sums_line=`md5sum ${bck_file} | awk '{print $1}'`" *.${file}"
-    fi
-  fi
-}
-
 verify_text_patch() {
   if [ -f ${APP_DIR}/${PATCH_NAME} ]; then
+    echo >> ${PATCH_LOG_FILE}
+    echo "----------------------------------" >> ${PATCH_LOG_FILE}
+    echo "Checking patch files" >> ${PATCH_LOG_FILE}
+    echo "----------------------------------" >> ${PATCH_LOG_FILE}
+    echo >> ${PATCH_LOG_FILE}
+  
     FILE_LIST=" "`${LSDIFF_EXEC} --addprefix=/ --strip=1 ${APP_DIR}/${PATCH_NAME}`
 
     for file in ${FILE_LIST} ; do
@@ -242,90 +176,54 @@ verify_text_patch() {
   fi
 }
 
-verify_binary_patches() {
-  if [ -d ${APP_DIR}/${BSPATCH_DIR} ]; then
-    echo >> ${PATCH_LOG_FILE}
-    echo "----------------------------------" >> ${PATCH_LOG_FILE}
-    echo "Checking binary patches" >> ${PATCH_LOG_FILE}
-    echo "----------------------------------" >> ${PATCH_LOG_FILE}
-    echo >> ${PATCH_LOG_FILE}
-
-    for i in `find ${APP_DIR}/${BSPATCH_DIR} -type f` ; do
-      file=`dirname ${i#${APP_DIR}/${BSPATCH_DIR}}`"/"`basename ${i} .bspatch`
-
-      FILE_LIST="${FILE_LIST} ${file}"
-
-      if [ -f ${file} ]; then
-        find_palm_md5sum
-
-        file_md5sum=`md5sum ${file} | awk '{print $1}'`
-
-        if [ -z "${palm_md5sum}" ]; then
-          FAIL_LIST="${FAIL_LIST} ${file}"
-        elif [ "${file_md5sum}" = "${palm_md5sum}" ]; then
-          echo | tee -a ${PATCH_LOG_FILE}
-          echo "Interestingly, the binary file is already unpatched" | tee -a ${PATCH_LOG_FILE}
-          echo | tee -a ${PATCH_LOG_FILE}
-
-          FAIL_LIST="${FAIL_LIST} ${file}"
-        else
-          get_bck_file
-
-          if [ -f ${bck_file} ]; then
-            rm -f /var/webosinternals-*
-
-            cp ${bck_file} /var/webosinternals-orig
-
-            ${BSPATCH_EXEC} /var/webosinternals-orig /var/webosinternals-patched ${i} 2>&1
-            tmp_md5sum=`md5sum /var/webosinternals-patched | awk '{print $1}'`
-
-            rm -f /var/webosinternals-*
-          fi
-
-          if [ "${file_md5sum}" != "${tmp_md5sum}" ]; then
-            FAIL_LIST="${FAIL_LIST} ${file}"
-          fi
-        fi
-      fi
-    done
-  fi
-}
-
-verify_additional_files() {
-  if [ -d ${APP_DIR}/${FILES_DIR} ]; then
-    echo >> ${PATCH_LOG_FILE}
-    echo "----------------------------------" >> ${PATCH_LOG_FILE}
-    echo "Checking additional files" >> ${PATCH_LOG_FILE}
-    echo "----------------------------------" >> ${PATCH_LOG_FILE}
-    echo >> ${PATCH_LOG_FILE}
-
-    for i in `find ${APP_DIR}/${FILES_DIR} -type f` ; do
-      file=${i#${APP_DIR}/${FILES_DIR}}
-
-      FILE_LIST="${FILE_LIST} ${file}"
-
-      get_bck_file
-
-      if [ -s ${bck_file} ]; then
-        find_palm_md5sum
-
-       if [ "${FILES_DIR}" = "files_additional" ] && [ ! -z "${palm_md5sum}" ]; then
-          echo | tee -a ${PATCH_LOG_FILE}
-          echo "Interestingly, the additional file is system file" | tee -a ${PATCH_LOG_FILE}
-          echo "  file: ${file}" | tee -a ${PATCH_LOG_FILE}
-          echo | tee -a ${PATCH_LOG_FILE}
-
-          FAIL_LIST="${FAIL_LIST} ${file}"
-        elif [ ! -f ${file} ]; then
-          echo | tee -a ${PATCH_LOG_FILE}
-          echo "Interestingly, the additional file is already removed" | tee -a ${PATCH_LOG_FILE}
-          echo "  file: ${file}" | tee -a ${PATCH_LOG_FILE}
-          echo | tee -a ${PATCH_LOG_FILE}
-        fi
-      fi
-    done
-  fi
-}
+# verify_binary_patches() {
+#   if [ -d ${APP_DIR}/${BSPATCH_DIR} ]; then
+#     echo >> ${PATCH_LOG_FILE}
+#     echo "----------------------------------" >> ${PATCH_LOG_FILE}
+#     echo "Checking binary patches" >> ${PATCH_LOG_FILE}
+#     echo "----------------------------------" >> ${PATCH_LOG_FILE}
+#     echo >> ${PATCH_LOG_FILE}
+# 
+#     for i in `find ${APP_DIR}/${BSPATCH_DIR} -type f` ; do
+#       file=`dirname ${i#${APP_DIR}/${BSPATCH_DIR}}`"/"`basename ${i} .bspatch`
+# 
+#       FILE_LIST="${FILE_LIST} ${file}"
+# 
+#       if [ -f ${file} ]; then
+#         find_palm_md5sum
+# 
+#         file_md5sum=`md5sum ${file} | awk '{print $1}'`
+# 
+#         if [ -z "${palm_md5sum}" ]; then
+#           FAIL_LIST="${FAIL_LIST} ${file}"
+#         elif [ "${file_md5sum}" = "${palm_md5sum}" ]; then
+#           echo | tee -a ${PATCH_LOG_FILE}
+#           echo "Interestingly, the binary file is already unpatched" | tee -a ${PATCH_LOG_FILE}
+#           echo | tee -a ${PATCH_LOG_FILE}
+# 
+#           FAIL_LIST="${FAIL_LIST} ${file}"
+#         else
+#           get_bck_file
+# 
+#           if [ -f ${bck_file} ]; then
+#             rm -f /var/webosinternals-*
+# 
+#             cp ${bck_file} /var/webosinternals-orig
+# 
+#             ${BSPATCH_EXEC} /var/webosinternals-orig /var/webosinternals-patched ${i} 2>&1
+#             tmp_md5sum=`md5sum /var/webosinternals-patched | awk '{print $1}'`
+# 
+#             rm -f /var/webosinternals-*
+#           fi
+# 
+#           if [ "${file_md5sum}" != "${tmp_md5sum}" ]; then
+#             FAIL_LIST="${FAIL_LIST} ${file}"
+#           fi
+#         fi
+#       fi
+#     done
+#   fi
+# }
 
 remove_text_patch() {
   if [ -f ${APP_DIR}/${PATCH_NAME} ]; then
@@ -349,71 +247,31 @@ remove_text_patch() {
   fi
 }
 
-remove_binary_patches() {
-  if [ -d ${APP_DIR}/${BSPATCH_DIR} ]; then
-    echo | tee -a ${PATCH_LOG_FILE}
-    echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-    echo "Unapplying binary patches" | tee -a ${PATCH_LOG_FILE}
-    echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-    echo | tee -a ${PATCH_LOG_FILE}
-
-    for i in `find ${APP_DIR}/${BSPATCH_DIR} -type f` ; do
-      file=`dirname ${i#${APP_DIR}/${BSPATCH_DIR}}`"/"`basename ${i} .bspatch`
-
-      echo "restoring file ${file#/}" | tee -a ${PATCH_LOG_FILE}
-
-      get_bck_file
-
-      if [ -f ${bck_file} ]; then
-        cp -f ${bck_file} ${file} 2>&1 | tee -a ${PATCH_LOG_FILE}
-
-        if [ ${?} -ne 0 ]; then
-          echo "  failed to restore binary file, file in use" | tee -a ${PATCH_LOG_FILE}
-        fi
-      fi
-    done
-  fi
-}
-
-remove_additional_files() {
-  if [ -d ${APP_DIR}/${FILES_DIR} ]; then
-    echo | tee -a ${PATCH_LOG_FILE}
-    echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-    echo "Removing additional files" | tee -a ${PATCH_LOG_FILE}
-    echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-    echo | tee -a ${PATCH_LOG_FILE}
-
-    for i in `find ${APP_DIR}/${FILES_DIR} -type f` ; do
-      file=${i#${APP_DIR}/${FILES_DIR}}
-
-      get_bck_file
-
-      if [ -f ${bck_file} ]; then
-        if [ ! -s ${bck_file} ]; then
-          echo "removing file ${file#/}" | tee -a ${PATCH_LOG_FILE}
-
-          rm -f ${file} 2>&1 | tee -a ${PATCH_LOG_FILE}
-        elif [ "${FILES_DIR}" != "files_additional" ]; then
-          echo "reverting file ${file#/}" | tee -a ${PATCH_LOG_FILE}
-
-          cp -f ${bck_file} ${file} 2>&1 | tee -a ${PATCH_LOG_FILE}
-        fi
-      fi
-    done
-  fi
-}
-
-remove_tweaks_preferences() {
-  if [ -f ${APP_DIR}/${TWEAKS_NAME} ]; then
-    echo | tee -a ${PATCH_LOG_FILE}
-    echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-    echo "Removing tweaks json file" | tee -a ${PATCH_LOG_FILE}
-    echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-    echo | tee -a ${PATCH_LOG_FILE}
-
-    rm -f ${TWEAKS_PREFERENCES_DIR}/`basename ${APP_DIR}`.json 2>&1 | tee -a ${PATCH_LOG_FILE}
-  fi
-}
+# remove_binary_patches() {
+#   if [ -d ${APP_DIR}/${BSPATCH_DIR} ]; then
+#     echo | tee -a ${PATCH_LOG_FILE}
+#     echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
+#     echo "Unapplying binary patches" | tee -a ${PATCH_LOG_FILE}
+#     echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
+#     echo | tee -a ${PATCH_LOG_FILE}
+# 
+#     for i in `find ${APP_DIR}/${BSPATCH_DIR} -type f` ; do
+#       file=`dirname ${i#${APP_DIR}/${BSPATCH_DIR}}`"/"`basename ${i} .bspatch`
+# 
+#       echo "restoring file ${file#/}" | tee -a ${PATCH_LOG_FILE}
+# 
+#       get_bck_file
+# 
+#       if [ -f ${bck_file} ]; then
+#         cp -f ${bck_file} ${file} 2>&1 | tee -a ${PATCH_LOG_FILE}
+# 
+#         if [ ${?} -ne 0 ]; then
+#           echo "  failed to restore binary file, file in use" | tee -a ${PATCH_LOG_FILE}
+#         fi
+#       fi
+#     done
+#   fi
+# }
 
 check_ota_update() {
   echo >> ${PATCH_LOG_FILE}
@@ -558,7 +416,7 @@ if [ ! -f ${PATCH_LOG_FILE} ]; then
   echo "*** Patch Log Created by Remove $(date) ***" > ${PATCH_LOG_FILE}
 fi
 
-mount -o rw,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
+# mount -o rw,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
 
 echo >> ${PATCH_LOG_FILE}
 echo "------------------------------------------------------" >> ${PATCH_LOG_FILE}
@@ -572,55 +430,43 @@ if [ -f ${APP_DIR}/${PATCH_NAME} ]; then
   echo "  contains text patch" >> ${PATCH_LOG_FILE}
 fi
 
-if [ -d ${APP_DIR}/${BSPATCH_DIR} ]; then
-  echo "  contains binary patches" >> ${PATCH_LOG_FILE}
-fi
-
-if [ -d ${APP_DIR}/${FILES_DIR} ]; then
-  if [ "${FILES_DIR}" = "files_additional" ]; then
-    echo "  contains additional files" >> ${PATCH_LOG_FILE}
-  elif [ "${FILES_DIR}" = "files_replaceable" ]; then
-    echo "  contains replaceable files" >> ${PATCH_LOG_FILE}
-  fi
-fi
-
-if [ -f ${APP_DIR}/${TWEAKS_NAME} ]; then
-  echo "  contains tweaks preferences" >> ${PATCH_LOG_FILE}
-fi
+# if [ -d ${APP_DIR}/${BSPATCH_DIR} ]; then
+#   echo "  contains binary patches" >> ${PATCH_LOG_FILE}
+# fi
 
 echo >> ${PATCH_LOG_FILE}
 
 if [ ! -x ${PATCH_EXEC} ]; then
   echo "ERROR: Cannot find ${PATCH_EXEC}" | tee -a ${PATCH_LOG_FILE} 1>&2
-  do_install_failure
+  do_remove_failure
 fi
 
 if [ ! -x ${LSDIFF_EXEC} ]; then
   echo "ERROR: Cannot find ${LSDIFF_EXEC}" | tee -a ${PATCH_LOG_FILE} 1>&2
-  do_install_failure
+  do_remove_failure
 fi
 
-if [ ! -x ${BSPATCH_EXEC} ]; then
-  echo "ERROR: Cannot find ${BSPATCH_EXEC}" | tee -a ${PATCH_LOG_FILE} 1>&2
-  do_install_failure
-fi
+# if [ ! -x ${BSPATCH_EXEC} ]; then
+#   echo "ERROR: Cannot find ${BSPATCH_EXEC}" | tee -a ${PATCH_LOG_FILE} 1>&2
+#   do_remove_failure
+# fi
 
 if [ -z ${APP_DIR} ]; then
   echo "ERROR: APP_DIR must be given for removing" | tee -a ${PATCH_LOG_FILE} 1>&2
-  do_install_failure
+  do_remove_failure
 fi
 
 if [ ! -d ${APP_DIR} ]; then
   echo "ERROR: ${APP_DIR} is not a directory or does not exist!" | tee -a ${PATCH_LOG_FILE} 1>&2
-  do_install_failure
+  do_remove_failure
 fi
 
 if [ ! -f ${APP_DIR}/${PATCH_NAME} ] && [ ! -d ${APP_DIR}/${BSPATCH_DIR} ] && [ ! -d ${APP_DIR}/${FILES_DIR} ]; then
   echo "ERROR: Cannot find patch file, binary patches or files directory!" | tee -a ${PATCH_LOG_FILE} 1>&2
-  do_install_failure
+  do_remove_failure
 fi
 
-rm -f /var/webosinternals.cache >/dev/null 2>&1
+rm -f $PATCH_CACHE_FILE >/dev/null 2>&1
 
 #
 # The main function that controls all the magic stuff
@@ -628,19 +474,13 @@ rm -f /var/webosinternals.cache >/dev/null 2>&1
 
 verify_text_patch
 
-verify_binary_patches
-
-verify_additional_files
+# verify_binary_patches
 
 check_ota_update
 
 remove_text_patch
 
-remove_binary_patches
-
-remove_additional_files
-
-remove_tweaks_preferences
+# remove_binary_patches
 
 clean_backup_files
 
