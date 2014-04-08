@@ -1,0 +1,25 @@
+Name: ausmt
+Summary: AUSMT
+Version: 1.2.1
+Release: 1
+Group: Qt/Qt
+URL: http://github.com/SfietKonstantin/ausmt
+License: TODO
+Sources:
+- '%{name}-%{version}.tar.bz2'
+Description: |
+  AUSMT stands for Auto-Update System Modification Technology. AUSMT enables
+  patching of webOS system safely, handling the situations like OTA updates
+  etc.
+
+  This modified AUSMT is used by patchmanager in SailfishOS to perform system
+  files, just like with Preware on webOS.
+Configure: none
+Builder: none
+PkgConfigBR: []
+Requires:
+- patch
+- patchutils
+- rpm >= 4.9.0
+Files:
+- /opt/ausmt
