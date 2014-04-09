@@ -4,7 +4,7 @@
 # These are expected to be set at packaging time
 #
 
-APP_DIR=${1}
+APP_DIR=/usr/share/patchmanager/patches/${1}
 
 PATCH_NAME=unified_diff.patch
 
@@ -25,7 +25,7 @@ PATCH_CACHE_FILE=/var/lib/patchmanager/ausmt/packages.cache
 # Required applications and their full execute paths
 #
 
-RPM_EXEC=/usr/bin/rpm
+RPM_EXEC=/bin/rpm
 PATCH_EXEC=/usr/bin/patch
 LSDIFF_EXEC=/usr/bin/lsdiff
 # BSPATCH_EXEC=/usr/bin/bspatch
@@ -49,6 +49,8 @@ do_remove_failure() {
   echo "*** FAILED ***" | tee -a ${PATCH_LOG_FILE}
   echo | tee -a ${PATCH_LOG_FILE}
 
+  /opt/ausmt/ausmt-notify frm ${APP_DIR}
+
   rm -f $PATCH_CACHE_FILE >/dev/null 2>&1
 
 #   mount -o ro,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
@@ -60,6 +62,8 @@ do_remove_success() {
   echo | tee -a ${PATCH_LOG_FILE}
   echo "*** SUCCESS ***" | tee -a ${PATCH_LOG_FILE}
   echo | tee -a ${PATCH_LOG_FILE}
+
+  /opt/ausmt/ausmt-notify rm ${APP_DIR}
 
   rm -f $PATCH_CACHE_FILE >/dev/null 2>&1
 
