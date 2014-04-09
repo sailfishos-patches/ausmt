@@ -20,6 +20,8 @@ PATCH_LOG_FILE=/var/lib/patchmanager/ausmt/ausmt.log
 PATCH_CONTROL_DIR=/var/lib/patchmanager/ausmt/control
 PATCH_PACKAGES_LIST=/var/lib/patchmanager/ausmt/packages
 PATCH_CACHE_FILE=/var/lib/patchmanager/ausmt/packages.cache
+LIPSTICK_FILE=/usr/bin/lipstick
+PANDORA_MD5SUMS=/opt/lipstick-pandora/md5sums
 
 #
 # Required applications and their full execute paths
@@ -103,18 +105,24 @@ find_palm_md5sum() {
   pkg_package=""
   pkg_version=""
 
-  md5sums_line=""
-
   echo "Finding md5sum for original file" >> ${PATCH_LOG_FILE}
   echo "  file: ${file}" >> ${PATCH_LOG_FILE}
   
   # We change from Palm, and use rpm to query the MD5 (or SHA256) sum
-  pkg_package=$(${RPM_EXEC} -q --queryformat '%{NAME}' -f ${file} 2> /dev/null)
-  pkg_version=$(${RPM_EXEC} -q --queryformat '%{VERSION}-%{RELEASE}' -f ${file} 2> /dev/null)
-  palm_md5sum=$(${RPM_EXEC} -q --queryformat '[%{FILENAMES} %{FILEMD5S}\n]' -f ${file} | grep ${file} | awk '{print $2}' 2> /dev/null)
+  # Check if the file is in an RPM
+  if [ ! -z "$(${RPM_EXEC} -q --queryformat '[%{FILENAMES}\n]' -f ${file} | grep ^${file})" ]; then
+    pkg_package=$(${RPM_EXEC} -q --queryformat '%{NAME}' -f ${file} 2> /dev/null)
+    pkg_version=$(${RPM_EXEC} -q --queryformat '%{VERSION}-%{RELEASE}' -f ${file} 2> /dev/null)
+    palm_md5sum=$(${RPM_EXEC} -q --queryformat '[%{FILENAMES} %{FILEMD5S}\n]' -f ${file} | grep ${file} | awk '{print $2}' 2> /dev/null)
+  fi
   
   if [ ! -z "${palm_md5sum}" ]; then
     echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>$PATCH_CACHE_FILE
+  else
+    echo "File not found in RPM packages, checking pandora" >> ${PATCH_LOG_FILE}
+    pkg_package=$(${RPM_EXEC} -q --queryformat '%{NAME}' -f ${LIPSTICK_FILE} 2> /dev/null)
+    pkg_version=$(${RPM_EXEC} -q --queryformat '%{VERSION}-%{RELEASE}' -f ${LIPSTICK_FILE} 2> /dev/null)
+    palm_md5sum=$(cat ${PANDORA_MD5SUMS} | grep ${file} | awk '{print $1}' 2> /dev/null)
   fi
 }
 
