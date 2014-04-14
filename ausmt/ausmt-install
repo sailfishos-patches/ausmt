@@ -108,13 +108,15 @@ find_palm_md5sum() {
     palm_md5sum=$(${RPM_EXEC} -q --queryformat '[%{FILENAMES} %{FILEMD5S}\n]' -f ${file} | grep ${file} | awk '{print $2}' 2> /dev/null)
   fi
   
-  if [ ! -z "${palm_md5sum}" ]; then
-    echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>$PATCH_CACHE_FILE
-  else
+  if [ -z "${palm_md5sum}" ]; then
     echo "File not found in RPM packages, checking pandora" >> ${PATCH_LOG_FILE}
     pkg_package=$(${RPM_EXEC} -q --queryformat '%{NAME}' -f ${LIPSTICK_FILE} 2> /dev/null)
     pkg_version=$(${RPM_EXEC} -q --queryformat '%{VERSION}-%{RELEASE}' -f ${LIPSTICK_FILE} 2> /dev/null)
     palm_md5sum=$(cat ${PANDORA_MD5SUMS} | grep ${file} | awk '{print $1}' 2> /dev/null)
+  fi
+  
+  if [ ! -z "${palm_md5sum}" ]; then
+    echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>$PATCH_CACHE_FILE
   fi
 }
 
