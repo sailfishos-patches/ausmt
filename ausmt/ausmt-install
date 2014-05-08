@@ -1,67 +1,67 @@
 #!/bin/sh
 
-#
-# These are expected to be set at packaging time
-#
+# 
+# Some constants
+# 
 
-APP_DIR=/usr/share/patchmanager/patches/${1}
-
-PATCH_NAME=unified_diff.patch
-
+# Paths / Files
+AUSMT_VAR_DIR=/var/lib/patchmanager/ausmt
+AUSMT_CONTROL_DIR=${AUSMT_VAR_DIR}/control
+PATCH_ROOT_DIR=/usr/share/patchmanager/patches
+PATCH_DIR=${PATCH_ROOT_DIR}/${1}
 # BSPATCH_DIR=binary_patches
+
+AUSMT_LOG_FILE=${AUSMT_VAR_DIR}/ausmt.log
+AUSMT_PACKAGES_LIST_FILE=${AUSMT_VAR_DIR}/packages
+AUSMT_CACHE_FILE=${AUSMT_VAR_DIR}/packages.cache
+
+LIPSTICK_FILE=/usr/bin/lipstick
+PANDORA_MD5SUMS_FILE=/opt/lipstick-pandora/md5sums
+
+# Constants
+PATCH_NAME=unified_diff.patch
+VERSION=ausmt-sailfishos-1
+
+# Applications
+RPM_EXEC=/bin/rpm
+PATCH_EXEC=/usr/bin/patch
+LSDIFF_EXEC=/usr/bin/lsdiff
+# BSPATCH_EXEC=/usr/bin/bspatch
 
 #
 # Here starts the part where all the magic happens
 #
 
-VERSION=ausmt-sailfishos-1
-
-ROOT=/var/lib/patchmanager/ausmt
-PATCH_LOG_FILE=/var/lib/patchmanager/ausmt/ausmt.log
-PATCH_CONTROL_DIR=/var/lib/patchmanager/ausmt/control
-PATCH_PACKAGES_LIST=/var/lib/patchmanager/ausmt/packages
-PATCH_CACHE_FILE=/var/lib/patchmanager/ausmt/packages.cache
-LIPSTICK_FILE=/usr/bin/lipstick
-PANDORA_MD5SUMS=/opt/lipstick-pandora/md5sums
-
-#
-# Required applications and their full execute paths
-#
-
-RPM_EXEC=/bin/rpm
-PATCH_EXEC=/usr/bin/patch
-LSDIFF_EXEC=/usr/bin/lsdiff
-# BSPATCH_EXEC=/usr/bin/bspatch
 #
 # Helper functions that do all the needed heavy work
 #
 
 do_install_failure() {
-  ${PATCH_EXEC} -s -p1 -d / --dry-run < ${APP_DIR}/${PATCH_NAME} | tee -a $PATCH_LOG 1>&2
+  ${PATCH_EXEC} -s -p1 -d / --dry-run < ${PATCH_DIR}/${PATCH_NAME} | tee -a $PATCH_LOG 1>&2
 
-  echo | tee -a ${PATCH_LOG_FILE}
-  echo "*** FAILED ***" | tee -a ${PATCH_LOG_FILE}
-  echo | tee -a ${PATCH_LOG_FILE}
+  echo | tee -a ${AUSMT_LOG_FILE}
+  echo "*** FAILED ***" | tee -a ${AUSMT_LOG_FILE}
+  echo | tee -a ${AUSMT_LOG_FILE}
 
-  /opt/ausmt/ausmt-notify fin ${APP_DIR}
+  /opt/ausmt/ausmt-notify fin ${PATCH_DIR}
 
-  rm -f $PATCH_CACHE_FILE >/dev/null 2>&1
+  rm -f $AUSMT_CACHE_FILE >/dev/null 2>&1
 
-#   mount -o ro,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
+#   mount -o ro,remount / | tee -a ${AUSMT_LOG_FILE} 1>&2
 
   exit 1
 }
 
 do_install_success() {
-  echo | tee -a ${PATCH_LOG_FILE}
-  echo "*** SUCCESS ***" | tee -a ${PATCH_LOG_FILE}
-  echo | tee -a ${PATCH_LOG_FILE}
+  echo | tee -a ${AUSMT_LOG_FILE}
+  echo "*** SUCCESS ***" | tee -a ${AUSMT_LOG_FILE}
+  echo | tee -a ${AUSMT_LOG_FILE}
 
-  /opt/ausmt/ausmt-notify in ${APP_DIR}
+  /opt/ausmt/ausmt-notify in ${PATCH_DIR}
 
-  rm -f $PATCH_CACHE_FILE >/dev/null 2>&1
+  rm -f $AUSMT_CACHE_FILE >/dev/null 2>&1
 
-#   mount -o ro,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
+#   mount -o ro,remount / | tee -a ${AUSMT_LOG_FILE} 1>&2
 
   exit 0
 }
@@ -79,10 +79,10 @@ get_palm_md5sum() {
   pkg_package=""
   pkg_version=""
 
-  appid=`basename ${APP_DIR}`
+  appid=`basename ${PATCH_DIR}`
 
-  if [ -f $PATCH_CACHE_FILE ]; then
-    md5sums_line=`grep "^${file} " $PATCH_CACHE_FILE`
+  if [ -f $AUSMT_CACHE_FILE ]; then
+    md5sums_line=`grep "^${file} " $AUSMT_CACHE_FILE`
 
     palm_md5sum=`echo ${md5sums_line} | awk '{print $2}'`
 
@@ -97,8 +97,8 @@ find_palm_md5sum() {
   pkg_package=""
   pkg_version=""
 
-  echo "Finding md5sum for original file" >> ${PATCH_LOG_FILE}
-  echo "  file: ${file}" >> ${PATCH_LOG_FILE}
+  echo "Finding md5sum for original file" >> ${AUSMT_LOG_FILE}
+  echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
   
   # We change from Palm, and use rpm to query the MD5 (or SHA256) sum
   # Check if the file is in an RPM
@@ -109,65 +109,65 @@ find_palm_md5sum() {
   fi
   
   if [ -z "${palm_md5sum}" ]; then
-    echo "File not found in RPM packages, checking pandora" >> ${PATCH_LOG_FILE}
+    echo "File not found in RPM packages, checking pandora" >> ${AUSMT_LOG_FILE}
     pkg_package=$(${RPM_EXEC} -q --queryformat '%{NAME}' -f ${LIPSTICK_FILE} 2> /dev/null)
     pkg_version=$(${RPM_EXEC} -q --queryformat '%{VERSION}-%{RELEASE}' -f ${LIPSTICK_FILE} 2> /dev/null)
-    palm_md5sum=$(cat ${PANDORA_MD5SUMS} | grep ${file} | awk '{print $1}' 2> /dev/null)
+    palm_md5sum=$(cat ${PANDORA_MD5SUMS_FILE} | grep ${file} | awk '{print $1}' 2> /dev/null)
   fi
   
   if [ ! -z "${palm_md5sum}" ]; then
-    echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>$PATCH_CACHE_FILE
+    echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>$AUSMT_CACHE_FILE
   fi
 }
 
 verify_text_patch() {
-  if [ -f ${APP_DIR}/${PATCH_NAME} ]; then
-    echo >> ${PATCH_LOG_FILE}
-    echo "----------------------------------" >> ${PATCH_LOG_FILE}
-    echo "Checking patch files" >> ${PATCH_LOG_FILE}
-    echo "----------------------------------" >> ${PATCH_LOG_FILE}
-    echo >> ${PATCH_LOG_FILE}
+  if [ -f ${PATCH_DIR}/${PATCH_NAME} ]; then
+    echo >> ${AUSMT_LOG_FILE}
+    echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+    echo "Checking patch files" >> ${AUSMT_LOG_FILE}
+    echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+    echo >> ${AUSMT_LOG_FILE}
 
-    FILE_LIST=" "`${LSDIFF_EXEC} --addprefix=/ --strip=1 ${APP_DIR}/${PATCH_NAME}`
+    FILE_LIST=" "`${LSDIFF_EXEC} --addprefix=/ --strip=1 ${PATCH_DIR}/${PATCH_NAME}`
 
     for file in ${FILE_LIST} ; do
       if [ -f ${file} ]; then
         find_palm_md5sum
 
         if [ -z "${palm_md5sum}" ]; then
-          echo | tee -a ${PATCH_LOG_FILE} 1>&2
-          echo "ERROR: Failed to find md5sum for the file" | tee -a ${PATCH_LOG_FILE} 1>&2
-          echo "  file: ${file}" | tee -a ${PATCH_LOG_FILE} 1>&2
-          echo | tee -a ${PATCH_LOG_FILE} 1>&2
+          echo | tee -a ${AUSMT_LOG_FILE} 1>&2
+          echo "ERROR: Failed to find md5sum for the file" | tee -a ${AUSMT_LOG_FILE} 1>&2
+          echo "  file: ${file}" | tee -a ${AUSMT_LOG_FILE} 1>&2
+          echo | tee -a ${AUSMT_LOG_FILE} 1>&2
 
           do_install_failure
         fi
       fi
     done
 
-    echo >> ${PATCH_LOG_FILE}
-    echo "----------------------------------" >> ${PATCH_LOG_FILE}
-    echo "Dry running patch" >> ${PATCH_LOG_FILE}
-    echo "----------------------------------" >> ${PATCH_LOG_FILE}
-    echo >> ${PATCH_LOG_FILE}
+    echo >> ${AUSMT_LOG_FILE}
+    echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+    echo "Dry running patch" >> ${AUSMT_LOG_FILE}
+    echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+    echo >> ${AUSMT_LOG_FILE}
 
-    ${PATCH_EXEC} -f -p 1 -d / --dry-run < ${APP_DIR}/${PATCH_NAME} 2>&1 >> ${PATCH_LOG_FILE}
+    ${PATCH_EXEC} -f -p 1 -d / --dry-run < ${PATCH_DIR}/${PATCH_NAME} 2>&1 >> ${AUSMT_LOG_FILE}
 
     if [ ${?} -ne 0 ]; then
-      echo >> ${PATCH_LOG_FILE}
-      echo "----------------------------------" >> ${PATCH_LOG_FILE}
-      echo "Dry run failed, trying with -R" >> ${PATCH_LOG_FILE}
-      echo "----------------------------------" >> ${PATCH_LOG_FILE}
-      echo >> ${PATCH_LOG_FILE}
+      echo >> ${AUSMT_LOG_FILE}
+      echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+      echo "Dry run failed, trying with -R" >> ${AUSMT_LOG_FILE}
+      echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+      echo >> ${AUSMT_LOG_FILE}
 
-      ${PATCH_EXEC} -f -R -p 1 -d / --dry-run < ${APP_DIR}/${PATCH_NAME} 2>&1 >> ${PATCH_LOG_FILE}
+      ${PATCH_EXEC} -f -R -p 1 -d / --dry-run < ${PATCH_DIR}/${PATCH_NAME} 2>&1 >> ${AUSMT_LOG_FILE}
 
       if [ ${?} -ne 0 ]; then
         do_install_failure
       else
-        echo | tee -a ${PATCH_LOG_FILE}
-        echo "Interestingly, the patch seems to be already applied" | tee -a ${PATCH_LOG_FILE}
-        echo | tee -a ${PATCH_LOG_FILE}
+        echo | tee -a ${AUSMT_LOG_FILE}
+        echo "Interestingly, the patch seems to be already applied" | tee -a ${AUSMT_LOG_FILE}
+        echo | tee -a ${AUSMT_LOG_FILE}
 
         patch_already_applied="yes"
       fi
@@ -176,15 +176,15 @@ verify_text_patch() {
 }
 
 # verify_binary_patches() {
-#   if [ -d ${APP_DIR}/${BSPATCH_DIR} ]; then
-#     echo >> ${PATCH_LOG_FILE}
-#     echo "----------------------------------" >> ${PATCH_LOG_FILE}
-#     echo "Checking binary patches" >> ${PATCH_LOG_FILE}
-#     echo "----------------------------------" >> ${PATCH_LOG_FILE}
-#     echo >> ${PATCH_LOG_FILE}
+#   if [ -d ${PATCH_DIR}/${BSPATCH_DIR} ]; then
+#     echo >> ${AUSMT_LOG_FILE}
+#     echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+#     echo "Checking binary patches" >> ${AUSMT_LOG_FILE}
+#     echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+#     echo >> ${AUSMT_LOG_FILE}
 # 
-#     for i in `find ${APP_DIR}/${BSPATCH_DIR} -type f` ; do
-#       file=`dirname ${i#${APP_DIR}/${BSPATCH_DIR}}`"/"`basename ${i} .bspatch`
+#     for i in `find ${PATCH_DIR}/${BSPATCH_DIR} -type f` ; do
+#       file=`dirname ${i#${PATCH_DIR}/${BSPATCH_DIR}}`"/"`basename ${i} .bspatch`
 # 
 #       if [ -f ${file} ]; then
 #         find_palm_md5sum
@@ -192,10 +192,10 @@ verify_text_patch() {
 #         file_md5sum=`md5sum ${file} | awk '{print $1}'`
 # 
 #         if [ -z "${palm_md5sum}" ]; then
-#           echo | tee -a ${PATCH_LOG_FILE} 1>&2
-#           echo "ERROR: Failed to find md5sum for the file" | tee -a ${PATCH_LOG_FILE} 1>&2
-#           echo "  file: ${file}" | tee -a ${PATCH_LOG_FILE} 1>&2
-#           echo | tee -a ${PATCH_LOG_FILE} 1>&2
+#           echo | tee -a ${AUSMT_LOG_FILE} 1>&2
+#           echo "ERROR: Failed to find md5sum for the file" | tee -a ${AUSMT_LOG_FILE} 1>&2
+#           echo "  file: ${file}" | tee -a ${AUSMT_LOG_FILE} 1>&2
+#           echo | tee -a ${AUSMT_LOG_FILE} 1>&2
 # 
 #           do_install_failure
 #         fi
@@ -203,20 +203,20 @@ verify_text_patch() {
 #         if [ "${file_md5sum}" = "${palm_md5sum}" ]; then
 #           FILE_LIST="${FILE_LIST} ${file}"
 #         else
-#           echo | tee -a ${PATCH_LOG_FILE} 1>&2
-#           echo "ERROR: File must be stock to be binary patched" | tee -a ${PATCH_LOG_FILE} 1>&2
-#           echo "  file: ${file}" | tee -a ${PATCH_LOG_FILE} 1>&2
-#           echo "  md5sum: ${file_md5sum}" | tee -a ${PATCH_LOG_FILE} 1>&2
-#           echo "  palm_md5sum: ${palm_md5sum}" | tee -a ${PATCH_LOG_FILE} 1>&2
-#           echo | tee -a ${PATCH_LOG_FILE} 1>&2
+#           echo | tee -a ${AUSMT_LOG_FILE} 1>&2
+#           echo "ERROR: File must be stock to be binary patched" | tee -a ${AUSMT_LOG_FILE} 1>&2
+#           echo "  file: ${file}" | tee -a ${AUSMT_LOG_FILE} 1>&2
+#           echo "  md5sum: ${file_md5sum}" | tee -a ${AUSMT_LOG_FILE} 1>&2
+#           echo "  palm_md5sum: ${palm_md5sum}" | tee -a ${AUSMT_LOG_FILE} 1>&2
+#           echo | tee -a ${AUSMT_LOG_FILE} 1>&2
 # 
 #           do_install_failure
 #         fi
 #       else
-#         echo | tee -a ${PATCH_LOG_FILE} 1>&2
-#         echo "ERROR: File to be binary patched does not exist" | tee -a ${PATCH_LOG_FILE} 1>&2
-#         echo "  file: ${file}" | tee -a ${PATCH_LOG_FILE} 1>&2
-#         echo | tee -a ${PATCH_LOG_FILE} 1>&2
+#         echo | tee -a ${AUSMT_LOG_FILE} 1>&2
+#         echo "ERROR: File to be binary patched does not exist" | tee -a ${AUSMT_LOG_FILE} 1>&2
+#         echo "  file: ${file}" | tee -a ${AUSMT_LOG_FILE} 1>&2
+#         echo | tee -a ${AUSMT_LOG_FILE} 1>&2
 # 
 #         do_install_failure
 #       fi
@@ -225,44 +225,44 @@ verify_text_patch() {
 # }
 
 install_text_patch() {
-  if [ -f ${APP_DIR}/${PATCH_NAME} ]; then
+  if [ -f ${PATCH_DIR}/${PATCH_NAME} ]; then
     if [ "${patch_already_applied}" != "yes" ]; then
-      echo | tee -a ${PATCH_LOG_FILE}
-      echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-      echo "Applying text patch" | tee -a ${PATCH_LOG_FILE}
-      echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-      echo | tee -a ${PATCH_LOG_FILE}
+      echo | tee -a ${AUSMT_LOG_FILE}
+      echo "----------------------------------" | tee -a ${AUSMT_LOG_FILE}
+      echo "Applying text patch" | tee -a ${AUSMT_LOG_FILE}
+      echo "----------------------------------" | tee -a ${AUSMT_LOG_FILE}
+      echo | tee -a ${AUSMT_LOG_FILE}
 
-      ${PATCH_EXEC} -f -p 1 -d / --no-backup-if-mismatch < ${APP_DIR}/${PATCH_NAME} 2>&1 | tee -a ${PATCH_LOG_FILE}
+      ${PATCH_EXEC} -f -p 1 -d / --no-backup-if-mismatch < ${PATCH_DIR}/${PATCH_NAME} 2>&1 | tee -a ${AUSMT_LOG_FILE}
     fi
   fi
 }
 
 # install_binary_patches() {
-#   if [ -d ${APP_DIR}/${BSPATCH_DIR} ]; then
-#     echo | tee -a ${PATCH_LOG_FILE}
-#     echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-#     echo "Applying binary patches" | tee -a ${PATCH_LOG_FILE}
-#     echo "----------------------------------" | tee -a ${PATCH_LOG_FILE}
-#     echo | tee -a ${PATCH_LOG_FILE}
+#   if [ -d ${PATCH_DIR}/${BSPATCH_DIR} ]; then
+#     echo | tee -a ${AUSMT_LOG_FILE}
+#     echo "----------------------------------" | tee -a ${AUSMT_LOG_FILE}
+#     echo "Applying binary patches" | tee -a ${AUSMT_LOG_FILE}
+#     echo "----------------------------------" | tee -a ${AUSMT_LOG_FILE}
+#     echo | tee -a ${AUSMT_LOG_FILE}
 # 
-#     for i in `find ${APP_DIR}/${BSPATCH_DIR} -type f` ; do
-#       file=`dirname ${i#${APP_DIR}/${BSPATCH_DIR}}`"/"`basename ${i} .bspatch`
+#     for i in `find ${PATCH_DIR}/${BSPATCH_DIR} -type f` ; do
+#       file=`dirname ${i#${PATCH_DIR}/${BSPATCH_DIR}}`"/"`basename ${i} .bspatch`
 # 
 #       get_bck_file
 # 
-#       echo "patching file ${file#/}" | tee -a ${PATCH_LOG_FILE}
+#       echo "patching file ${file#/}" | tee -a ${AUSMT_LOG_FILE}
 # 
 #       rm -f /var/webosinternals-*
 # 
 #       cp ${file} /var/webosinternals-orig
 # 
-#       ${BSPATCH_EXEC} /var/webosinternals-orig /var/webosinternals-patched ${i} 2>&1 | tee -a ${PATCH_LOG_FILE}
+#       ${BSPATCH_EXEC} /var/webosinternals-orig /var/webosinternals-patched ${i} 2>&1 | tee -a ${AUSMT_LOG_FILE}
 # 
 #       cp -f /var/webosinternals-patched ${file}
 # 
 #       if [ ${?} -ne 0 ]; then
-#         echo "  failed to patch binary file, file in use" | tee -a ${PATCH_LOG_FILE}
+#         echo "  failed to patch binary file, file in use" | tee -a ${AUSMT_LOG_FILE}
 #       elif [ -x ${bck_file} ]; then
 #         chmod 755 ${file}
 #       fi
@@ -274,11 +274,11 @@ install_text_patch() {
 # 
 
 check_ota_update() {
-  echo >> ${PATCH_LOG_FILE}
-  echo "----------------------------------" >> ${PATCH_LOG_FILE}
-  echo "Checking md5sums for ota" >> ${PATCH_LOG_FILE}
-  echo "----------------------------------" >> ${PATCH_LOG_FILE}
-  echo >> ${PATCH_LOG_FILE}
+  echo >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo "Checking md5sums for ota" >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo >> ${AUSMT_LOG_FILE}
 
   for file in ${FILE_LIST} ; do
     get_bck_file
@@ -289,8 +289,8 @@ check_ota_update() {
       file_md5sum=`sha256sum ${file} | awk '{print $1}'`
 
       if [ "${file_md5sum}" = "${palm_md5sum}" ]; then
-        echo "File matches current system md5sum, assuming OTA" >> ${PATCH_LOG_FILE}
-        echo "  file: ${file}" >> ${PATCH_LOG_FILE}
+        echo "File matches current system md5sum, assuming OTA" >> ${AUSMT_LOG_FILE}
+        echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
 
         rm -f ${bck_file}
       fi
@@ -299,11 +299,11 @@ check_ota_update() {
 }
 
 create_backup_files() {
-  echo >> ${PATCH_LOG_FILE}
-  echo "----------------------------------" >> ${PATCH_LOG_FILE}
-  echo "Creating backup files" >> ${PATCH_LOG_FILE}
-  echo "----------------------------------" >> ${PATCH_LOG_FILE}
-  echo >> ${PATCH_LOG_FILE}
+  echo >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo "Creating backup files" >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo >> ${AUSMT_LOG_FILE}
 
   for file in ${FILE_LIST} ; do
     get_bck_file
@@ -312,15 +312,15 @@ create_backup_files() {
 
     if [ ! -f ${bck_file} ]; then
       if [ ! -f ${file} ]; then
-        echo "Created file, generating empty backup file" >>${PATCH_LOG_FILE}
-        echo "  file: ${file}" >> ${PATCH_LOG_FILE}
+        echo "Created file, generating empty backup file" >>${AUSMT_LOG_FILE}
+        echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
 
         mkdir -p `dirname ${file}`
 
         touch ${bck_file}
       else
-        echo "Modified file, backing up the original file" >> ${PATCH_LOG_FILE}
-        echo "  file: ${file}" >> ${PATCH_LOG_FILE}
+        echo "Modified file, backing up the original file" >> ${AUSMT_LOG_FILE}
+        echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
 
         cp ${file} ${bck_file}
       fi
@@ -343,87 +343,87 @@ create_backup_files() {
     then
       tmpvar=`echo "${file}" | tr '/' '.'`
 
-      sed -i -e /"^${tmpvar} "/d ${PATCH_CONTROL_DIR}/file_list
-      echo "${file} ${VERSION}" >> ${PATCH_CONTROL_DIR}/file_list
+      sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_list
+      echo "${file} ${VERSION}" >> ${AUSMT_CONTROL_DIR}/file_list
     fi
 
     if [ ! -z "${palm_md5sum}" ]; then
       tmpvar=`echo "${appid} ${file}" | tr '/' '.'`
 
-      sed -i -e /"^${tmpvar} "/d ${PATCH_CONTROL_DIR}/file_md5sums
-      echo "${appid} ${file} ${palm_md5sum}" >> ${PATCH_CONTROL_DIR}/file_md5sums
+      sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_md5sums
+      echo "${appid} ${file} ${palm_md5sum}" >> ${AUSMT_CONTROL_DIR}/file_md5sums
     fi
 
     if [ ! -z "${pkg_version}" ]; then
       tmpvar=`echo "${pkg_package} ${file}" | tr '/' '.'`
 
-      sed -i -e /"^${tmpvar} "/d ${PATCH_CONTROL_DIR}/file_control
-      echo "${pkg_package} ${file} ${pkg_version}" >> ${PATCH_CONTROL_DIR}/file_control
+      sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_control
+      echo "${pkg_package} ${file} ${pkg_version}" >> ${AUSMT_CONTROL_DIR}/file_control
     fi
   done
 
-  sed -i -e /"^`basename ${APP_DIR}` "/d ${PATCH_PACKAGES_LIST}
+  sed -i -e /"^`basename ${PATCH_DIR}` "/d ${AUSMT_PACKAGES_LIST_FILE}
 
-  echo "`basename ${APP_DIR}` ${VERSION}" >> ${PATCH_PACKAGES_LIST}
+  echo "`basename ${PATCH_DIR}` ${VERSION}" >> ${AUSMT_PACKAGES_LIST_FILE}
 }
 
 #
 # Bunch of safety checks and required initializations
 #
 
-mkdir -p ${ROOT} > /dev/null 2>&1
+mkdir -p ${AUSMT_VAR_DIR} > /dev/null 2>&1
 
-if [ ! -f ${PATCH_LOG_FILE} ]; then
-  echo "*** Patch Log Created by Install $(date) ***" > ${PATCH_LOG_FILE}
+if [ ! -f ${AUSMT_LOG_FILE} ]; then
+  echo "*** Patch Log Created by Install $(date) ***" > ${AUSMT_LOG_FILE}
 fi
 
-# mount -o rw,remount / | tee -a ${PATCH_LOG_FILE} 1>&2
+# mount -o rw,remount / | tee -a ${AUSMT_LOG_FILE} 1>&2
 
-echo >> ${PATCH_LOG_FILE}
-echo "------------------------------------------------------" >> ${PATCH_LOG_FILE}
-echo "AUSMT INSTALL $(date)" >> ${PATCH_LOG_FILE}
-echo "------------------------------------------------------" >> ${PATCH_LOG_FILE}
-echo >> ${PATCH_LOG_FILE}
+echo >> ${AUSMT_LOG_FILE}
+echo "------------------------------------------------------" >> ${AUSMT_LOG_FILE}
+echo "AUSMT INSTALL $(date)" >> ${AUSMT_LOG_FILE}
+echo "------------------------------------------------------" >> ${AUSMT_LOG_FILE}
+echo >> ${AUSMT_LOG_FILE}
 
-echo `basename ${APP_DIR}` >> ${PATCH_LOG_FILE}
+echo `basename ${PATCH_DIR}` >> ${AUSMT_LOG_FILE}
 
-if [ -f ${APP_DIR}/${PATCH_NAME} ]; then
-  echo "  contains text patch" >> ${PATCH_LOG_FILE}
+if [ -f ${PATCH_DIR}/${PATCH_NAME} ]; then
+  echo "  contains text patch" >> ${AUSMT_LOG_FILE}
 fi
 
-# if [ -d ${APP_DIR}/${BSPATCH_DIR} ]; then
-#   echo "  contains binary patches" >> ${PATCH_LOG_FILE}
+# if [ -d ${PATCH_DIR}/${BSPATCH_DIR} ]; then
+#   echo "  contains binary patches" >> ${AUSMT_LOG_FILE}
 # fi
 
-echo >> ${PATCH_LOG_FILE}
+echo >> ${AUSMT_LOG_FILE}
 
 if [ ! -x ${PATCH_EXEC} ]; then
-  echo "ERROR: Cannot find ${PATCH_EXEC}" | tee -a ${PATCH_LOG_FILE} 1>&2
+  echo "ERROR: Cannot find ${PATCH_EXEC}" | tee -a ${AUSMT_LOG_FILE} 1>&2
   do_install_failure
 fi
 
 if [ ! -x ${LSDIFF_EXEC} ]; then
-  echo "ERROR: Cannot find ${LSDIFF_EXEC}" | tee -a ${PATCH_LOG_FILE} 1>&2
+  echo "ERROR: Cannot find ${LSDIFF_EXEC}" | tee -a ${AUSMT_LOG_FILE} 1>&2
   do_install_failure
 fi
 
 # if [ ! -x ${BSPATCH_EXEC} ]; then
-#   echo "ERROR: Cannot find ${BSPATCH_EXEC}" | tee -a ${PATCH_LOG_FILE} 1>&2
+#   echo "ERROR: Cannot find ${BSPATCH_EXEC}" | tee -a ${AUSMT_LOG_FILE} 1>&2
 #   do_install_failure
 # fi
 
-if [ -z ${APP_DIR} ]; then
-  echo "ERROR: APP_DIR must be given for installing" | tee -a ${PATCH_LOG_FILE} 1>&2
+if [ -z ${PATCH_DIR} ]; then
+  echo "ERROR: PATCH_DIR must be given for installing" | tee -a ${AUSMT_LOG_FILE} 1>&2
   do_install_failure
 fi
 
-if [ ! -d ${APP_DIR} ]; then
-  echo "ERROR: ${APP_DIR} is not a directory or does not exist!" | tee -a ${PATCH_LOG_FILE} 1>&2
+if [ ! -d ${PATCH_DIR} ]; then
+  echo "ERROR: ${PATCH_DIR} is not a directory or does not exist!" | tee -a ${AUSMT_LOG_FILE} 1>&2
   do_install_failure
 fi
 
-if [ ! -f ${APP_DIR}/${PATCH_NAME} ] && [ ! -d ${APP_DIR}/${BSPATCH_DIR} ] && [ ! -d ${APP_DIR}/${FILES_DIR} ]; then
-  echo "ERROR: Cannot find patch file, binary patches or files directory!" | tee -a ${PATCH_LOG_FILE} 1>&2
+if [ ! -f ${PATCH_DIR}/${PATCH_NAME} ] && [ ! -d ${PATCH_DIR}/${BSPATCH_DIR} ] && [ ! -d ${PATCH_DIR}/${FILES_DIR} ]; then
+  echo "ERROR: Cannot find patch file, binary patches or files directory!" | tee -a ${AUSMT_LOG_FILE} 1>&2
   do_install_failure
 fi
 
@@ -431,35 +431,35 @@ fi
 # Intialize / update the aupt control system
 #
 
-mkdir -p ${PATCH_CONTROL_DIR} >/dev/null 2>&1
+mkdir -p ${AUSMT_CONTROL_DIR} >/dev/null 2>&1
 
-if [ -f ${PATCH_CONTROL_DIR}/backups ]; then
-  echo "ERROR: Old backup system detected, not supported by AUSMT!" | tee -a ${PATCH_LOG_FILE} 1>&2
+if [ -f ${AUSMT_CONTROL_DIR}/backups ]; then
+  echo "ERROR: Old backup system detected, not supported by AUSMT!" | tee -a ${AUSMT_LOG_FILE} 1>&2
   do_install_failure
 fi
 
-if [ -f ${PATCH_CONTROL_DIR}/packages ]; then
-  echo "ERROR: Old control system detected, not supported by AUSMT!" | tee -a ${PATCH_LOG_FILE} 1>&2
+if [ -f ${AUSMT_CONTROL_DIR}/packages ]; then
+  echo "ERROR: Old control system detected, not supported by AUSMT!" | tee -a ${AUSMT_LOG_FILE} 1>&2
   do_install_failure
 fi
 
-if [ ! -f ${PATCH_CONTROL_DIR}/file_list ]; then
-  touch ${PATCH_CONTROL_DIR}/file_list || do_install_failure
+if [ ! -f ${AUSMT_CONTROL_DIR}/file_list ]; then
+  touch ${AUSMT_CONTROL_DIR}/file_list || do_install_failure
 fi
 
-if [ ! -f ${PATCH_CONTROL_DIR}/file_control ]; then
-  touch ${PATCH_CONTROL_DIR}/file_control || do_install_failure
+if [ ! -f ${AUSMT_CONTROL_DIR}/file_control ]; then
+  touch ${AUSMT_CONTROL_DIR}/file_control || do_install_failure
 fi
  
-if [ ! -f ${PATCH_CONTROL_DIR}/file_md5sums ]; then
-  touch ${PATCH_CONTROL_DIR}/file_md5sums || do_install_failure
+if [ ! -f ${AUSMT_CONTROL_DIR}/file_md5sums ]; then
+  touch ${AUSMT_CONTROL_DIR}/file_md5sums || do_install_failure
 fi
 
-if [ ! -f ${PATCH_PACKAGES_LIST} ]; then
-  touch ${PATCH_PACKAGES_LIST} || do_install_failure
+if [ ! -f ${AUSMT_PACKAGES_LIST_FILE} ]; then
+  touch ${AUSMT_PACKAGES_LIST_FILE} || do_install_failure
 fi
 
-rm -f $PATCH_CACHE_FILE >/dev/null 2>&1
+rm -f $AUSMT_CACHE_FILE >/dev/null 2>&1
 
 #
 # The main function that controls all the magic stuff
