@@ -379,6 +379,12 @@ clean_backup_files() {
       orig_md5sum=`${MD5SUM_EXEC} ${bck_file} | awk '{print $1}'`
     fi
 
+    if [ ! -z "${palm_md5sum}" ]; then
+      tmpvar=`echo "${appid} ${file}" | tr '/' '.'`
+
+      sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_md5sums
+    fi
+    
     if [ ! -f ${file} ] && [ ! -s ${bck_file} ] || \
        [ "${file_md5sum}" = "${orig_md5sum}" ] || [ "${file_md5sum}" = "${palm_md5sum}" ]
     then
@@ -397,18 +403,12 @@ clean_backup_files() {
       tmpvar=`echo "${file}" | tr '/' '.'`
 
       sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_list
-    fi
+      
+      if [ ! -z "${pkg_version}" ]; then
+        tmpvar=`echo "${pkg_package} ${file}" | tr '/' '.'`
 
-    if [ ! -z "${palm_md5sum}" ]; then
-      tmpvar=`echo "${appid} ${file}" | tr '/' '.'`
-
-      sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_md5sums
-    fi
-
-    if [ ! -z "${pkg_version}" ]; then
-      tmpvar=`echo "${pkg_package} ${file}" | tr '/' '.'`
-
-      sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_control
+        sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_control
+      fi
     fi
   done
 
