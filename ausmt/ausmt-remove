@@ -23,6 +23,7 @@ PATCH_NAME=unified_diff.patch
 VERSION=ausmt-sailfishos-1
 
 # Applications
+MD5SUM_EXEC=/usr/bin/sha256sum
 RPM_EXEC=/bin/rpm
 PATCH_EXEC=/usr/bin/patch
 LSDIFF_EXEC=/usr/bin/lsdiff
@@ -198,7 +199,7 @@ verify_text_patch() {
 #       if [ -f ${file} ]; then
 #         find_palm_md5sum
 # 
-#         file_md5sum=`md5sum ${file} | awk '{print $1}'`
+#         file_md5sum=`${MD5SUM_EXEC} ${file} | awk '{print $1}'`
 # 
 #         if [ -z "${palm_md5sum}" ]; then
 #           FAIL_LIST="${FAIL_LIST} ${file}"
@@ -217,7 +218,7 @@ verify_text_patch() {
 #             cp ${bck_file} /var/webosinternals-orig
 # 
 #             ${BSPATCH_EXEC} /var/webosinternals-orig /var/webosinternals-patched ${i} 2>&1
-#             tmp_md5sum=`md5sum /var/webosinternals-patched | awk '{print $1}'`
+#             tmp_md5sum=`${MD5SUM_EXEC} /var/webosinternals-patched | awk '{print $1}'`
 # 
 #             rm -f /var/webosinternals-*
 #           fi
@@ -293,7 +294,7 @@ check_ota_update() {
       if [ -f ${bck_file} ]; then
         get_palm_md5sum
 
-        file_md5sum=`md5sum ${file} | awk '{print $1}'`
+        file_md5sum=`${MD5SUM_EXEC} ${file} | awk '{print $1}'`
 
         orig_md5sum=`grep -h "${appid} ${file} " ${AUSMT_CONTROL_DIR}/file_md5sums | awk '{print $3}'`
 
@@ -369,13 +370,13 @@ clean_backup_files() {
     if [ ! -f ${file} ]; then
       file_md5sum=""
     else
-      file_md5sum=`md5sum $file | awk '{print $1}'`
+      file_md5sum=`${MD5SUM_EXEC} $file | awk '{print $1}'`
     fi
 
     if [ ! -f ${bck_file} ]; then
       orig_md5sum=""
     else
-      orig_md5sum=`md5sum ${bck_file} | awk '{print $1}'`
+      orig_md5sum=`${MD5SUM_EXEC} ${bck_file} | awk '{print $1}'`
     fi
 
     if [ ! -f ${file} ] && [ ! -s ${bck_file} ] || \

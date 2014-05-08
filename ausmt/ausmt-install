@@ -23,6 +23,7 @@ PATCH_NAME=unified_diff.patch
 VERSION=ausmt-sailfishos-1
 
 # Applications
+MD5SUM_EXEC=/usr/bin/sha256sum
 RPM_EXEC=/bin/rpm
 PATCH_EXEC=/usr/bin/patch
 LSDIFF_EXEC=/usr/bin/lsdiff
@@ -189,7 +190,7 @@ verify_text_patch() {
 #       if [ -f ${file} ]; then
 #         find_palm_md5sum
 # 
-#         file_md5sum=`md5sum ${file} | awk '{print $1}'`
+#         file_md5sum=`${MD5SUM_EXEC} ${file} | awk '{print $1}'`
 # 
 #         if [ -z "${palm_md5sum}" ]; then
 #           echo | tee -a ${AUSMT_LOG_FILE} 1>&2
@@ -286,7 +287,7 @@ check_ota_update() {
     get_palm_md5sum
 
     if [ -f ${bck_file} ]; then
-      file_md5sum=`sha256sum ${file} | awk '{print $1}'`
+      file_md5sum=`${MD5SUM_EXEC} ${file} | awk '{print $1}'`
 
       if [ "${file_md5sum}" = "${palm_md5sum}" ]; then
         echo "File matches current system md5sum, assuming OTA" >> ${AUSMT_LOG_FILE}
@@ -329,13 +330,13 @@ create_backup_files() {
     if [ ! -f ${file} ]; then
       file_md5sum=""
     else
-      file_md5sum=`md5sum $file | awk '{print $1}'`
+      file_md5sum=`${MD5SUM_EXEC} $file | awk '{print $1}'`
     fi
 
     if [ ! -f ${bck_file} ]; then
       orig_md5sum=""
     else
-      orig_md5sum=`md5sum ${bck_file} | awk '{print $1}'`
+      orig_md5sum=`${MD5SUM_EXEC} ${bck_file} | awk '{print $1}'`
     fi
 
     if [ ! -f ${file} ] && [ ! -s ${bck_file} ] || \
