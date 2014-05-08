@@ -26,6 +26,7 @@ Requires:   patch
 BuildRequires:  pkgconfig(Qt5DBus)
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(nemonotifications-qt5)
+BuildRequires:  pkgconfig(Qt5Test)
 
 %description
 AUSMT stands for Auto-Update System Modification Technology. AUSMT enables
@@ -35,6 +36,15 @@ etc.
 This modified AUSMT is used by patchmanager in SailfishOS to perform system
 files, just like with Preware on webOS.
 
+
+%package tests
+Summary:    Tests for AUSMT
+License:    TODO
+Group:      Qt/Qt
+Requires:   %{name} = %{version}-%{release}
+
+%description tests
+A set of tests for AUSMT
 
 %prep
 %setup -q -n %{name}-%{version}
@@ -59,11 +69,24 @@ rm -rf %{buildroot}
 # << install pre
 %qmake5_install
 
+%postun
+# >> postun
+rm -rf /opt/ausmt/tests/var
+# << postun
+
 # >> install post
 # << install post
 
 %files
 %defattr(-,root,root,-)
-/opt/ausmt
+/opt/ausmt/ausmt-install
+/opt/ausmt/ausmt-remove
+/opt/ausmt/ausmt-notify
 # >> files
 # << files
+
+%files tests
+%defattr(-,root,root,-)
+/opt/ausmt/tests
+# >> files tests
+# << files tests

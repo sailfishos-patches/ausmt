@@ -411,7 +411,7 @@ clean_backup_files() {
     fi
   done
 
-  sed -i -e /"^`basename ${PATCH_DIR}` "/d ${AUSMT_PACKAGES_LIST}
+  sed -i -e /"^`basename ${PATCH_DIR}` "/d ${AUSMT_PACKAGES_LIST_FILE}
 }
 
 #

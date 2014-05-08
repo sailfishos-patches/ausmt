@@ -20,10 +20,21 @@ PkgConfigBR:
 - Qt5DBus
 - Qt5Core
 - nemonotifications-qt5
+- Qt5Test
 Requires:
 - rpm >= 4.9.0
 - patchutils
 - patch
 Files:
-- /opt/ausmt
+- /opt/ausmt/ausmt-install
+- /opt/ausmt/ausmt-remove
+- /opt/ausmt/ausmt-notify
 PkgBR: []
+SubPackages:
+-  Name: tests
+   Summary: Tests for AUSMT
+   Description: A set of tests for AUSMT
+   Group: Qt/Qt
+   License: TODO
+   Files:
+   - /opt/ausmt/tests
