@@ -9,7 +9,11 @@ PKGCONFIG += nemonotifications-qt5
 SOURCES += \
     main.cpp
 
-target.path = /opt/ausmt
+OTHER_FILES = ausmt-notify-wrapper
 
-INSTALLS += target
+target.path = /opt/ausmt
+wrapper.files = $${OTHER_FILES}
+wrapper.path = /opt/ausmt
+
+INSTALLS += target wrapper
 

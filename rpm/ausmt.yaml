@@ -29,6 +29,7 @@ Files:
 - /opt/ausmt/ausmt-install
 - /opt/ausmt/ausmt-remove
 - /opt/ausmt/ausmt-notify
+- /opt/ausmt/ausmt-notify-wrapper
 PkgBR: []
 SubPackages:
 -  Name: tests

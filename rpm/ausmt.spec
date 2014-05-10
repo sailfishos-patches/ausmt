@@ -69,19 +69,20 @@ rm -rf %{buildroot}
 # << install pre
 %qmake5_install
 
+# >> install post
+# << install post
+
 %postun
 # >> postun
 rm -rf /opt/ausmt/tests/var
 # << postun
-
-# >> install post
-# << install post
 
 %files
 %defattr(-,root,root,-)
 /opt/ausmt/ausmt-install
 /opt/ausmt/ausmt-remove
 /opt/ausmt/ausmt-notify
+/opt/ausmt/ausmt-notify-wrapper
 # >> files
 # << files
 

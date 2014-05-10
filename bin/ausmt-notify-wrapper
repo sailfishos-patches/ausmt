@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# Provides the session bus address for root processes
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/100000/dbus/user_bus_socket"
+/opt/ausmt/ausmt-notify "$@"

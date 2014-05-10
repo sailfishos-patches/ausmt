@@ -44,7 +44,7 @@ do_remove_failure() {
   echo "*** FAILED ***" | tee -a ${AUSMT_LOG_FILE}
   echo | tee -a ${AUSMT_LOG_FILE}
 
-  /opt/ausmt/ausmt-notify frm ${PATCH_DIR}
+  /opt/ausmt/ausmt-notify-wrapper frm ${PATCH_DIR}
 
   rm -f $AUSMT_CACHE_FILE >/dev/null 2>&1
 
@@ -58,7 +58,7 @@ do_remove_success() {
   echo "*** SUCCESS ***" | tee -a ${AUSMT_LOG_FILE}
   echo | tee -a ${AUSMT_LOG_FILE}
 
-  /opt/ausmt/ausmt-notify rm ${PATCH_DIR}
+  /opt/ausmt/ausmt-notify-wrapper rm ${PATCH_DIR}
 
   rm -f $AUSMT_CACHE_FILE >/dev/null 2>&1
 
