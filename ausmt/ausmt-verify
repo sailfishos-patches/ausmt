@@ -1,39 +1,64 @@
 #!/bin/sh
 
+# 
+# Some constants
+# 
+
+
+# Paths / Files
+AUSMT_VAR_DIR=/var/lib/patchmanager/ausmt
+AUSMT_CONTROL_DIR=${AUSMT_VAR_DIR}/control
+PATCH_ROOT_DIR=/usr/share/patchmanager/patches
+PATCH_DIR=${PATCH_ROOT_DIR}/${1}
+AUSMT_FAILED_FILE=${AUSMT_VAR_DIR}/webosinternals.failed
+AUSMT_MD5SUMS_FILE=${AUSMT_VAR_DIR}/webosinternals.md5sums
+# BSPATCH_DIR=binary_patches
+
+AUSMT_LOG_FILE=${AUSMT_VAR_DIR}/ausmt.log
+AUSMT_PACKAGES_LIST_FILE=${AUSMT_VAR_DIR}/packages
+AUSMT_CACHE_FILE=${AUSMT_VAR_DIR}/packages.cache
+
+LIPSTICK_FILE=/usr/bin/lipstick
+PANDORA_MD5SUMS_FILE=/opt/lipstick-pandora/md5sums
+
+# Constants
+PATCH_NAME=unified_diff.patch
+VERSION=ausmt-sailfishos-1
+VERSIONS=ausmt-sailfishos-1
+
+# Applications
+MD5SUM_EXEC=/usr/bin/sha256sum
+RPM_EXEC=/bin/rpm
+PATCH_EXEC=/usr/bin/patch
+LSDIFF_EXEC=/usr/bin/lsdiff
+# BSPATCH_EXEC=/usr/bin/bspatch
+
 #
 # Here starts the part where all the magic happens
 #
-
-VERSIONS="aupt-3 aupt-4 ausmt-1"
-
-IPKG_INFO_DIR=/usr/lib/ipkg/info
-
-PATCH_LOG_FILE=/media/internal/webos-ausmt.log
-PATCH_CONTROL_DIR=/var/usr/lib/.webosinternals.patches
-PATCH_PACKAGES_LIST=/media/internal/.webosinternals.patches.packages
 
 #
 # Helper functions that do all the needed heavy work
 #
 
 do_verify_failure() {
-  echo | tee -a ${PATCH_LOG_FILE}
-  echo "*** FAILED ***" | tee -a ${PATCH_LOG_FILE}
-  echo | tee -a ${PATCH_LOG_FILE}
+  echo | tee -a ${AUSMT_LOG_FILE}
+  echo "*** FAILED ***" | tee -a ${AUSMT_LOG_FILE}
+  echo | tee -a ${AUSMT_LOG_FILE}
 
-  rm -f /var/webosinternals.failed
-  rm -f /var/webosinternals.md5sums
+  rm -f ${AUSMT_FAILED_FILE}
+  rm -f ${AUSMT_MD5SUMS_FILE}
 
   exit 1
 }
 
 do_verify_success() {
-  echo | tee -a ${PATCH_LOG_FILE}
-  echo "*** SUCCESS ***" | tee -a ${PATCH_LOG_FILE}
-  echo | tee -a ${PATCH_LOG_FILE}
+  echo | tee -a ${AUSMT_LOG_FILE}
+  echo "*** SUCCESS ***" | tee -a ${AUSMT_LOG_FILE}
+  echo | tee -a ${AUSMT_LOG_FILE}
 
-  rm -f /var/webosinternals.failed
-  rm -f /var/webosinternals.md5sums
+  rm -f ${AUSMT_FAILED_FILE}
+  rm -f ${AUSMT_MD5SUMS_FILE}
 
   exit 0
 }
@@ -42,35 +67,35 @@ do_verify_success() {
 # Bunch of safety checks and required initializations
 #
 
-if [ ! -e ${PATCH_LOG_FILE} ]; then
-  echo "******* Patch Log Created by Verify $(date) ************" > ${PATCH_LOG_FILE}
+if [ ! -e ${AUSMT_LOG_FILE} ]; then
+  echo "******* Patch Log Created by Verify $(date) ************" > ${AUSMT_LOG_FILE}
 fi
 
-echo >> ${PATCH_LOG_FILE}
-echo "------------------------------------------------------" >> ${PATCH_LOG_FILE}
-echo "AUSMT System Verification $(date)" >> ${PATCH_LOG_FILE}
-echo "------------------------------------------------------" >> ${PATCH_LOG_FILE}
-echo >> ${PATCH_LOG_FILE}
+echo >> ${AUSMT_LOG_FILE}
+echo "------------------------------------------------------" >> ${AUSMT_LOG_FILE}
+echo "AUSMT System Verification $(date)" >> ${AUSMT_LOG_FILE}
+echo "------------------------------------------------------" >> ${AUSMT_LOG_FILE}
+echo >> ${AUSMT_LOG_FILE}
 
 #
 # The main function that controls all the magic stuff
 #
 
-if [ -f "${PATCH_PACKAGES_LIST}" ]; then
-  echo >> ${PATCH_LOG_FILE}
-  echo "----------------------------------" >> ${PATCH_LOG_FILE}
-  echo "Checking package versions" >> ${PATCH_LOG_FILE}
-  echo "----------------------------------" >> ${PATCH_LOG_FILE}
-  echo >> ${PATCH_LOG_FILE}
+if [ -f "${AUSMT_PACKAGES_LIST_FILE}" ]; then
+  echo >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo "Checking package versions" >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo >> ${AUSMT_LOG_FILE}
 
-  echo "Checking package versions..." | tee -a ${PATCH_LOG_FILE}
+  echo "Checking package versions..." | tee -a ${AUSMT_LOG_FILE}
 
   while read i ; do
     package=`echo ${i} |awk '{print $1}'`
     version=`echo ${i} |awk '{print $2}'`
 
     if [ -z "${version}" ]; then
-      version="aupt-1"
+      version=${VERSION}
     fi
 
     version_ok="no"
@@ -84,50 +109,48 @@ if [ -f "${PATCH_PACKAGES_LIST}" ]; then
     if [ "${version_ok}" = "no" ]; then
       OLD_PACKAGES="${OLD_PACKAGES} ${package}"
 
-      echo "Found package with unsupported version" | tee -a ${PATCH_LOG_FILE} 1>&2
-      echo "  package: ${package}" | tee -a ${PATCH_LOG_FILE} 1>&2
-      echo "  version: ${version}" | tee -a ${PATCH_LOG_FILE} 1>&2
+      echo "Found package with unsupported version" | tee -a ${AUSMT_LOG_FILE} 1>&2
+      echo "  package: ${package}" | tee -a ${AUSMT_LOG_FILE} 1>&2
+      echo "  version: ${version}" | tee -a ${AUSMT_LOG_FILE} 1>&2
     fi
-  done < ${PATCH_PACKAGES_LIST}
+  done < ${AUSMT_PACKAGES_LIST_FILE}
 
   if [ ! -z "${OLD_PACKAGES}" ]; then
-    echo >> ${PATCH_LOG_FILE}
-    echo "ERROR: Unsupported package versions detected" | tee -a ${PATCH_LOG_FILE} 1>&2
-    echo >> ${PATCH_LOG_FILE}
+    echo >> ${AUSMT_LOG_FILE}
+    echo "ERROR: Unsupported package versions detected" | tee -a ${AUSMT_LOG_FILE} 1>&2
+    echo >> ${AUSMT_LOG_FILE}
 
     do_verify_failure
   fi
 fi
 
-if [ -e /usr/bin/md5sum ]; then
-  echo >> ${PATCH_LOG_FILE}
-  echo "----------------------------------" >> ${PATCH_LOG_FILE}
-  echo "Verifying system files" >> ${PATCH_LOG_FILE}
-  echo "----------------------------------" >> ${PATCH_LOG_FILE}
-  echo >> ${PATCH_LOG_FILE}
+if [ -e ${MD5SUM_EXEC} ]; then
+  echo >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo "Verifying system files" >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo >> ${AUSMT_LOG_FILE}
 
-  echo "Verifying system files..." | tee -a ${PATCH_LOG_FILE}
+  echo "Verifying system files..." | tee -a ${AUSMT_LOG_FILE}
 
-  rm -f /var/webosinternals.failed
-  rm -f /var/webosinternals.md5sums
+  rm -f ${AUSMT_FAILED_FILE}
+  rm -f ${AUSMT_MD5SUMS_FILE}
 
-  cat ${IPKG_INFO_DIR}/*.md5sums > /var/webosinternals.md5sums
+  rpm -qa --queryformat '[%{FILEMD5S}  %{FILENAMES}\n]' | sed -e '/^  .*$/d' > ${AUSMT_MD5SUMS_FILE}
 
   sed -i \
-      -e '/ \*\.\/usr\/palm\/applications\/.*\/framework_config.json/d' \
-      -e '/ \*\.\/var\/lib\/software\/tmp\/flashing-progress\.tga/d' \
-      -e '/ \*\.\/var\/lib\/update\/install-first-update\.sh/d' \
-      -e '/ \*\.\/var\/lib\/update\/install-first.sh/d' \
-      -e '/ \*\.\/usr\/local\/bin\/wifi-mfg-labtool/d' \
-      -e '/ \*\.\/var\/palm\/data\/smartkey\//d' \
-      -e '/ \*\.\/etc\/udev\/mount\.blacklist/d' \
-      -e '/ \*\.\/etc\/\.rootfs_RW/d' \
-      -e '/ \*\.\/lib\/modules\//d' \
-      -e '/ \*\.\/boot\//d' \
-      /var/webosinternals.md5sums
+      -e '/[0-9a-f]*  \/lib\/modules\/.*/d' \
+      -e '/[0-9a-f]*  \/system\/.*/d' \
+      -e '/[0-9a-f]*  \/data\/.*/d' \
+      -e '/[0-9a-f]*  \/etc\/.*/d' \
+      -e '/[0-9a-f]*  \/var\/.*/d' \
+      -e '/[0-9a-f]*  \/usr\/share\/lipstick\/devicelock\/\..*/d' \
+      -e '/[0-9a-f]*  \/usr\/lib\/locale\/.*/d' \
+      -e '/[0-9a-f]*  \/usr\/share\/info\/dir/d' \
+      ${AUSMT_MD5SUMS_FILE}
 
-  cd / && /usr/bin/md5sum -c /var/webosinternals.md5sums 2>/dev/null | \
-    grep -v OK > /var/webosinternals.failed
+  cd / && ${MD5SUM_EXEC} -c ${AUSMT_MD5SUMS_FILE} 2>/dev/null | \
+    grep -v OK > ${AUSMT_FAILED_FILE}
 
   while read i ; do
     backup_file=""
@@ -135,8 +158,8 @@ if [ -e /usr/bin/md5sum ]; then
 
     file=`echo ${i} |awk -F: '{print $1}' |cut -d '.' -f2-`
 
-    if [ -e ${PATCH_CONTROL_DIR}/file_list ]; then
-      backup_file=`grep -h ${file} ${PATCH_CONTROL_DIR}/file_list`
+    if [ -e ${AUSMT_CONTROL_DIR}/file_list ]; then
+      backup_file=`grep -h ${file} ${AUSMT_CONTROL_DIR}/file_list`
       backup_version=`echo ${backup_file} | awk '{print $2}'`
     fi
 
@@ -155,26 +178,26 @@ if [ -e /usr/bin/md5sum ]; then
     if [ -z "${backup_file}" ]; then
       NO_BACKUP_FILES="${NO_BACKUP_FILES} ${file}"
 
-      echo "File modified with unsupported methods" | tee -a ${PATCH_LOG_FILE} 1>&2
-      echo "  file: ${file}" | tee -a ${PATCH_LOG_FILE} 1>&2
+      echo "File modified with unsupported methods" | tee -a ${AUSMT_LOG_FILE} 1>&2
+      echo "  file: ${file}" | tee -a ${AUSMT_LOG_FILE} 1>&2
     elif [ "${backup_good}" = "no" ]; then
       OLD_BACKUP_FILES="${OLD_BACKUP_FILES} ${file}"
 
-      echo "Found backup file with unsupported version" | tee -a ${PATCH_LOG_FILE} 1>&2
-      echo "  file: ${file}" | tee -a ${PATCH_LOG_FILE} 1>&2
+      echo "Found backup file with unsupported version" | tee -a ${AUSMT_LOG_FILE} 1>&2
+      echo "  file: ${file}" | tee -a ${AUSMT_LOG_FILE} 1>&2
     fi
-  done < /var/webosinternals.failed
+  done < ${AUSMT_FAILED_FILE}
 
   if [ ! -z "${NO_BACKUP_FILES}" ]; then
-    echo >> ${PATCH_LOG_FILE}
-    echo "ERROR: Unsupported file modifications detected" | tee -a ${PATCH_LOG_FILE} 1>&2
-    echo >> ${PATCH_LOG_FILE}
+    echo >> ${AUSMT_LOG_FILE}
+    echo "ERROR: Unsupported file modifications detected" | tee -a ${AUSMT_LOG_FILE} 1>&2
+    echo >> ${AUSMT_LOG_FILE}
   fi
 
   if [ ! -z "${OLD_BACKUP_FILES}" ]; then
-    echo >> ${PATCH_LOG_FILE}
-    echo "ERROR: Unsupported backup file versions detected" | tee -a ${PATCH_LOG_FILE} 1>&2
-    echo >> ${PATCH_LOG_FILE}
+    echo >> ${AUSMT_LOG_FILE}
+    echo "ERROR: Unsupported backup file versions detected" | tee -a ${AUSMT_LOG_FILE} 1>&2
+    echo >> ${AUSMT_LOG_FILE}
   fi
 
   if [ ! -z "${NO_BACKUP_FILES}" ] || [ ! -z "${OLD_BACKUP_FILES}" ]; then

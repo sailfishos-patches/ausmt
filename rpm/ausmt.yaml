@@ -13,7 +13,7 @@ Description: |
   etc.
 
   This modified AUSMT is used by patchmanager in SailfishOS to perform system
-  files, just like with Preware on webOS.
+  file patching, just like with Preware on webOS.
 Configure: none
 Builder: qtc5
 PkgConfigBR:
@@ -28,6 +28,7 @@ Requires:
 Files:
 - /opt/ausmt/ausmt-install
 - /opt/ausmt/ausmt-remove
+- /opt/ausmt/ausmt-verify
 - /opt/ausmt/ausmt-notify
 - /opt/ausmt/ausmt-notify-wrapper
 PkgBR: []

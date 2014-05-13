@@ -81,6 +81,7 @@ rm -rf /opt/ausmt/tests/var
 %defattr(-,root,root,-)
 /opt/ausmt/ausmt-install
 /opt/ausmt/ausmt-remove
+/opt/ausmt/ausmt-verify
 /opt/ausmt/ausmt-notify
 /opt/ausmt/ausmt-notify-wrapper
 # >> files
