@@ -34,7 +34,7 @@ patching of webOS system safely, handling the situations like OTA updates
 etc.
 
 This modified AUSMT is used by patchmanager in SailfishOS to perform system
-files, just like with Preware on webOS.
+file patching, just like with Preware on webOS.
 
 
 %package tests
