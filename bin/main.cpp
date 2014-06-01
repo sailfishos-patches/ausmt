@@ -39,6 +39,7 @@
 
 static const char *PATCH_FILE = "patch.json";
 static const char *PATCHES_DIR = "/usr/share/patchmanager/patches";
+static const char *BACKUP_PATCHES_DIR = "/var/lib/patchmanager/ausmt/patches";
 static const char *NAME_KEY = "name";
 
 int main(int argc, char **argv)
@@ -56,9 +57,13 @@ int main(int argc, char **argv)
 
     QDir dir (PATCHES_DIR);
     if (!dir.cd(patch)) {
-        // Patch won't apply so no need to notify
-        return 2;
+        dir = QDir(BACKUP_PATCHES_DIR);
+        if (!dir.cd(patch)) {
+            // Patch won't apply so no need to notify
+            return 2;
+        }
     }
+
 
     QFile file (dir.absoluteFilePath(PATCH_FILE));
     if (!file.open(QIODevice::ReadOnly)) {
