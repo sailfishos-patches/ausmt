@@ -140,6 +140,7 @@ if [ -e ${MD5SUM_EXEC} ]; then
   rm -f ${AUSMT_MD5SUMS_FILE}
 
   rpm -qa --queryformat '[%{FILEMD5S}  %{FILENAMES}\n]' | sed -e '/^  .*$/d' > ${AUSMT_MD5SUMS_FILE}
+  cat ${PANDORA_MD5SUMS_FILE} >> ${AUSMT_MD5SUMS_FILE}
 
   sed -i \
       -e '/[0-9a-f]*  \/lib\/modules\/.*/d' \
