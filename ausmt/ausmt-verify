@@ -13,7 +13,6 @@ PATCH_DIR=${PATCH_ROOT_DIR}/${1}
 AUSMT_FAILED_FILE=${AUSMT_VAR_DIR}/webosinternals.failed
 AUSMT_MD5SUMS_FILE=${AUSMT_VAR_DIR}/webosinternals.md5sums
 AUSMT_PATCHMANAGER_LOG_FILE=${AUSMT_VAR_DIR}/patchmanager.log
-# BSPATCH_DIR=binary_patches
 
 AUSMT_LOG_FILE=${AUSMT_VAR_DIR}/ausmt.log
 AUSMT_PACKAGES_LIST_FILE=${AUSMT_VAR_DIR}/packages
@@ -32,7 +31,6 @@ MD5SUM_EXEC=/usr/bin/sha256sum
 RPM_EXEC=/bin/rpm
 PATCH_EXEC=/usr/bin/patch
 LSDIFF_EXEC=/usr/bin/lsdiff
-# BSPATCH_EXEC=/usr/bin/bspatch
 
 #
 # Here starts the part where all the magic happens
