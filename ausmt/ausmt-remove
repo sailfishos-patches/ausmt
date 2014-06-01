@@ -13,6 +13,7 @@ PATCH_DIR=${PATCH_ROOT_DIR}/${1}
 AUSMT_LOG_FILE=${AUSMT_VAR_DIR}/ausmt.log
 AUSMT_PACKAGES_LIST_FILE=${AUSMT_VAR_DIR}/packages
 AUSMT_CACHE_FILE=${AUSMT_VAR_DIR}/packages.cache
+AUSMT_PATCH_BACKUP_DIR=${AUSMT_VAR_DIR}/patches/${1}
 
 LIPSTICK_FILE=/usr/bin/lipstick
 PANDORA_MD5SUMS_FILE=/opt/lipstick-pandora/md5sums
@@ -36,7 +37,7 @@ LSDIFF_EXEC=/usr/bin/lsdiff
 #
 
 do_remove_failure() {
-  ${PATCH_EXEC} -s -p1 -R -d / --dry-run < ${PATCH_DIR}/${PATCH_NAME} | tee -a $PATCH_LOG 1>&2
+  ${PATCH_EXEC} -s -p1 -R -d / --dry-run < ${patch_file} | tee -a $PATCH_LOG 1>&2
 
   echo | tee -a ${AUSMT_LOG_FILE}
   echo "*** FAILED ***" | tee -a ${AUSMT_LOG_FILE}
@@ -134,14 +135,20 @@ check_packages_file() {
 }
 
 verify_text_patch() {
-  if [ -f ${PATCH_DIR}/${PATCH_NAME} ]; then
+  if [ -f ${AUSMT_PATCH_BACKUP_DIR}/${PATCH_NAME} ]; then
+    patch_file=${AUSMT_PATCH_BACKUP_DIR}/${PATCH_NAME}
+  else
+    patch_file=${PATCH_DIR}/${PATCH_NAME}
+  fi
+
+  if [ -f ${patch_file} ]; then
     echo >> ${AUSMT_LOG_FILE}
     echo "----------------------------------" >> ${AUSMT_LOG_FILE}
     echo "Checking patch files" >> ${AUSMT_LOG_FILE}
     echo "----------------------------------" >> ${AUSMT_LOG_FILE}
     echo >> ${AUSMT_LOG_FILE}
   
-    FILE_LIST=" "`${LSDIFF_EXEC} --addprefix=/ --strip=1 ${PATCH_DIR}/${PATCH_NAME}`
+    FILE_LIST=" "`${LSDIFF_EXEC} --addprefix=/ --strip=1 ${patch_file}`
 
     for file in ${FILE_LIST} ; do
       find_palm_md5sum
@@ -153,7 +160,7 @@ verify_text_patch() {
     echo "----------------------------------" >> ${AUSMT_LOG_FILE}
     echo >> ${AUSMT_LOG_FILE}
 
-    ${PATCH_EXEC} -f -R -p 1 -d / --dry-run < ${PATCH_DIR}/${PATCH_NAME} 2>&1 >> ${AUSMT_LOG_FILE}
+    ${PATCH_EXEC} -f -R -p 1 -d / --dry-run < ${patch_file} 2>&1 >> ${AUSMT_LOG_FILE}
 
     if [ ${?} -ne 0 ]; then
       echo >> ${AUSMT_LOG_FILE}
@@ -162,7 +169,7 @@ verify_text_patch() {
       echo "----------------------------------" >> ${AUSMT_LOG_FILE}
       echo >> ${AUSMT_LOG_FILE}
 
-      ${PATCH_EXEC} -f -p 1 -d / --dry-run < ${PATCH_DIR}/${PATCH_NAME} 2>&1 >> ${AUSMT_LOG_FILE}
+      ${PATCH_EXEC} -f -p 1 -d / --dry-run < ${patch_file} 2>&1 >> ${AUSMT_LOG_FILE}
 
       if [ ${?} -eq 0 ]; then
         echo | tee -a ${AUSMT_LOG_FILE}
@@ -171,7 +178,7 @@ verify_text_patch() {
 
         patch_already_unapplied="yes"
       else
-        FAIL_LIST=" "`${PATCH_EXEC} -s -f -R -p 1 -d / --dry-run < ${PATCH_DIR}/${PATCH_NAME} 2>&1 | awk '{print "/"$12}' | sed s:".rej$":"":`
+        FAIL_LIST=" "`${PATCH_EXEC} -s -f -R -p 1 -d / --dry-run < ${patch_file} 2>&1 | awk '{print "/"$12}' | sed s:".rej$":"":`
 
         if [ "${FAIL_LIST}" = "${FILE_LIST}" ]; then
           patch_already_unapplied="yes"
@@ -182,7 +189,7 @@ verify_text_patch() {
 }
 
 remove_text_patch() {
-  if [ -f ${PATCH_DIR}/${PATCH_NAME} ]; then
+  if [ -f ${patch_file} ]; then
     if [ "${patch_already_unapplied}" != "yes" ]; then
       echo | tee -a ${AUSMT_LOG_FILE}
       echo "----------------------------------" | tee -a ${AUSMT_LOG_FILE}
@@ -190,10 +197,10 @@ remove_text_patch() {
       echo "----------------------------------" | tee -a ${AUSMT_LOG_FILE}
       echo | tee -a ${AUSMT_LOG_FILE}
 
-      ${PATCH_EXEC} -R -p 1 -d / --no-backup-if-mismatch < ${PATCH_DIR}/${PATCH_NAME} 2>&1 | tee -a ${AUSMT_LOG_FILE}
+      ${PATCH_EXEC} -R -p 1 -d / --no-backup-if-mismatch < ${patch_file} 2>&1 | tee -a ${AUSMT_LOG_FILE}
 
       if [ ${?} -ne 0 ]; then
-        for file in `${LSDIFF_EXEC} --addprefix=/ --strip=1 ${PATCH_DIR}/${PATCH_NAME}` ; do
+        for file in `${LSDIFF_EXEC} --addprefix=/ --strip=1 ${patch_file}` ; do
           if [ -f ${file}.rej ]; then
             rm -f ${file}.rej
           fi
@@ -338,6 +345,18 @@ clean_backup_files() {
   sed -i -e /"^`basename ${PATCH_DIR}` "/d ${AUSMT_PACKAGES_LIST_FILE}
 }
 
+clean_backup_patch() {
+  echo >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo "Cleaning backup patch" >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo >> ${AUSMT_LOG_FILE}
+
+  rm -fr ${AUSMT_PATCH_BACKUP_DIR} > /dev/null 2>&1
+  echo "Removed backup" >>${AUSMT_LOG_FILE}
+  echo "  backup: ${AUSMT_PATCH_BACKUP_DIR}" >>${AUSMT_LOG_FILE}
+}
+
 #
 # Bunch of safety checks and required initializations
 #
@@ -356,7 +375,7 @@ echo >> ${AUSMT_LOG_FILE}
 
 echo `basename ${PATCH_DIR}` >> ${AUSMT_LOG_FILE}
 
-if [ -f ${PATCH_DIR}/${PATCH_NAME} ]; then
+if [ -f ${patch_file} ]; then
   echo "  contains text patch" >> ${AUSMT_LOG_FILE}
 fi
 
@@ -382,8 +401,8 @@ if [ ! -d ${PATCH_DIR} ]; then
   do_remove_failure
 fi
 
-if [ ! -f ${PATCH_DIR}/${PATCH_NAME} ] && [ ! -d ${PATCH_DIR}/${BSPATCH_DIR} ] && [ ! -d ${PATCH_DIR}/${FILES_DIR} ]; then
-  echo "ERROR: Cannot find patch file, binary patches or files directory!" | tee -a ${AUSMT_LOG_FILE} 1>&2
+if [ ! -f ${patch_file} ]; then
+  echo "ERROR: Cannot find patch file !" | tee -a ${AUSMT_LOG_FILE} 1>&2
   do_remove_failure
 fi
 
@@ -400,6 +419,8 @@ check_ota_update
 remove_text_patch
 
 clean_backup_files
+
+clean_backup_patch
 
 do_remove_success
 

@@ -13,6 +13,8 @@ PATCH_DIR=${PATCH_ROOT_DIR}/${1}
 AUSMT_LOG_FILE=${AUSMT_VAR_DIR}/ausmt.log
 AUSMT_PACKAGES_LIST_FILE=${AUSMT_VAR_DIR}/packages
 AUSMT_CACHE_FILE=${AUSMT_VAR_DIR}/packages.cache
+AUSMT_PATCH_BACKUP_ROOT_DIR=${AUSMT_VAR_DIR}/patches
+AUSMT_PATCH_BACKUP_DIR=${AUSMT_PATCH_BACKUP_ROOT_DIR}/${1}
 
 LIPSTICK_FILE=/usr/bin/lipstick
 PANDORA_MD5SUMS_FILE=/opt/lipstick-pandora/md5sums
@@ -282,6 +284,19 @@ create_backup_files() {
   echo "`basename ${PATCH_DIR}` ${VERSION}" >> ${AUSMT_PACKAGES_LIST_FILE}
 }
 
+create_backup_patch() {
+  echo >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo "Creating backup patch" >> ${AUSMT_LOG_FILE}
+  echo "----------------------------------" >> ${AUSMT_LOG_FILE}
+  echo >> ${AUSMT_LOG_FILE}
+
+  mkdir -p ${AUSMT_PATCH_BACKUP_ROOT_DIR} > /dev/null 2>&1
+  cp -fr ${PATCH_DIR} ${AUSMT_PATCH_BACKUP_DIR} > /dev/null 2>&1
+  echo "Created backup" >>${AUSMT_LOG_FILE}
+  echo "  backup: ${AUSMT_PATCH_BACKUP_DIR}" >>${AUSMT_LOG_FILE}
+}
+
 #
 # Bunch of safety checks and required initializations
 #
@@ -328,8 +343,8 @@ if [ ! -d ${PATCH_DIR} ]; then
   do_install_failure
 fi
 
-if [ ! -f ${PATCH_DIR}/${PATCH_NAME} ] && [ ! -d ${PATCH_DIR}/${BSPATCH_DIR} ] && [ ! -d ${PATCH_DIR}/${FILES_DIR} ]; then
-  echo "ERROR: Cannot find patch file, binary patches or files directory!" | tee -a ${AUSMT_LOG_FILE} 1>&2
+if [ ! -f ${PATCH_DIR}/${PATCH_NAME} ]; then
+  echo "ERROR: Cannot find patch file !" | tee -a ${AUSMT_LOG_FILE} 1>&2
   do_install_failure
 fi
 
@@ -378,6 +393,8 @@ check_ota_update
 create_backup_files
 
 install_text_patch
+
+create_backup_patch
 
 do_install_success
 
