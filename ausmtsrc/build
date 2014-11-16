@@ -1,0 +1,34 @@
+#!/usr/bin/python3
+import os
+
+def processFile(key, files):
+    newContent = ""
+    for line in files[key].split('\n'):
+        if line.startswith("#include "):
+            include = line.strip().split(" ")[1]
+            newContent += processFile(include, files)
+        else:
+            newContent += line
+            newContent += '\n'
+    newContent = newContent.strip() + "\n"
+    return newContent
+
+input = os.path.dirname(__file__)
+fileList = [ f for f in os.listdir(input) if os.path.isfile(os.path.join(input, f)) and f != os.path.basename(__file__) ]
+
+files = {}
+for file in fileList:
+    with open(file) as f:
+        files[file] = f.read()
+        f.close()
+
+try:
+    os.mkdir('../ausmt')
+except:
+    pass
+
+for key in files:
+    if not key.endswith('.sh') and not key.endswith('.pro'):
+        with open("../ausmt/" + key, 'w') as f:
+            f.write(processFile(key, files))
+            f.close()

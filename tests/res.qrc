@@ -1,0 +1,21 @@
+<RCC>
+    <qresource prefix="/">
+        <file>ausmtsrc/ausmt-install</file>
+        <file>ausmtsrc/ausmt-remove</file>
+        <file>ausmtsrc/build</file>
+        <file>ausmtsrc/constants.sh</file>
+        <file>ausmtsrc/finished.sh</file>
+        <file>ausmtsrc/bck_file.sh</file>
+        <file>ausmtsrc/utils.sh</file>
+        <file>ausmtsrc-test/palm_md5sum.sh</file>
+        <file>ausmtsrc-test/constants_exec.sh</file>
+        <file>files/simple.qml</file>
+        <file>files/gen_md5sum.sh</file>
+        <file>patches/make_patch.sh</file>
+        <file>patches/simple-patch1/unified_diff.patch</file>
+        <file>patches/simple-patch2/unified_diff.patch</file>
+        <file>patched/simple-patch1.qml</file>
+        <file>patched/simple-patch2.qml</file>
+        <file>patched/simple-patch12.qml</file>
+    </qresource>
+</RCC>

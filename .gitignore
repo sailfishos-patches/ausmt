@@ -1,3 +1,4 @@
-build
+build/
 ausmt.pro.*
-tests/ausmt-*
+tests/ausmtsrc
+tests/files/md5sums

@@ -33,14 +33,36 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QProcess>
+#include <QtCore/QStandardPaths>
+#include <QtCore/QTextStream>
+#include <QtCore/QDebug>
+
+static const char *AUSMTSRC_SUBDIR = "ausmtsrc";
+static const char *AUSMT_SUBDIR = "ausmt";
+static const char *AUSMT_VAR_SUBDIR = "var";
+static const char *AUSMT_PATCHES_SUBDIR = "patches";
+static const char *AUSMT_FILES_SUBDIR = "files";
+static const char *CONSTANTS_ROOT_SH = "constants_root.sh";
+static const char *CONSTANTS_EXEC_SH = "constants_exec.sh";
+static const char *PYTHON = "python3";
+static const char *BUILD_SH = "build";
+static const char *MAKE_PATCH_SH = "make_patch.sh";
+static const char *GEN_MD5SUM_SH = "gen_md5sum.sh";
+
+static const char *AUSMT_INSTALL = "ausmt-install";
+static const char *AUSMT_REMOVE = "ausmt-remove";
 
 class TestAusmt: public QObject
 {
     Q_OBJECT
 private:
-    bool clear();
-    bool prepareSimple();
+    void prepareSimple();
+    void checkSimple1Applied();
+    void checkSimple2Applied();
+    void checkSimple12Applied();
+    void checkUnapplied();
 private slots:
+    void initTestCase();
     void testSimple();
     void testReapply();
     void testExternalRemoved();
@@ -50,499 +72,488 @@ private slots:
     // Need to write patch for unapplicable patches and conflicting ones
 };
 
-bool TestAusmt::clear()
+#define GET_DIR \
+    QDir dir (QStandardPaths::writableLocation(QStandardPaths::TempLocation)); \
+    if (!dir.exists(AUSMT_SUBDIR)) { \
+        QVERIFY(dir.mkdir(AUSMT_SUBDIR)); \
+    } \
+    QVERIFY(dir.cd(AUSMT_SUBDIR))
+
+#define GET_VAR_DIR \
+    QDir varDir (dir); \
+    if (!varDir.exists(AUSMT_VAR_SUBDIR)) { \
+        QVERIFY(varDir.mkdir(AUSMT_VAR_SUBDIR)); \
+    } \
+    QVERIFY(varDir.cd(AUSMT_VAR_SUBDIR))
+
+#define GET_PATCHES_DIR \
+    QDir patchesDir (dir); \
+    if (!patchesDir.exists(AUSMT_PATCHES_SUBDIR)) { \
+        QVERIFY(patchesDir.mkdir(AUSMT_PATCHES_SUBDIR)); \
+    } \
+    QVERIFY(patchesDir.cd(AUSMT_PATCHES_SUBDIR))
+
+#define GET_FILES_DIR \
+    QDir filesDir (dir); \
+    if (!filesDir.exists(AUSMT_FILES_SUBDIR)) { \
+        QVERIFY(filesDir.mkdir(AUSMT_FILES_SUBDIR)); \
+    } \
+    QVERIFY(filesDir.cd(AUSMT_FILES_SUBDIR))
+
+void TestAusmt::initTestCase()
 {
-    QDir dir ("/opt/ausmt/tests/var");
-    if (!dir.removeRecursively()) {
-        return false;
+    // Dirs
+    QDir srcDir (QStandardPaths::writableLocation(QStandardPaths::TempLocation));
+    if (!srcDir.exists(AUSMTSRC_SUBDIR)) {
+        QVERIFY(srcDir.mkdir(AUSMTSRC_SUBDIR));
+    }
+    QVERIFY(srcDir.cd(AUSMTSRC_SUBDIR));
+
+    GET_DIR;
+    GET_VAR_DIR;
+    GET_PATCHES_DIR;
+    GET_FILES_DIR;
+
+    // Dump AUSMT into src dir
+    QDir ausmtResDir (":/ausmtsrc/");
+    foreach (const QString &fileName, ausmtResDir.entryList(QDir::Files)) {
+        QFile file (ausmtResDir.absoluteFilePath(fileName));
+        if (srcDir.exists(fileName)) {
+            QVERIFY(QFileInfo(srcDir.absoluteFilePath(fileName)).isFile());
+            QVERIFY(srcDir.remove(fileName));
+        }
+        QVERIFY(file.copy(srcDir.absoluteFilePath(fileName)));
     }
 
-    return true;
+    QDir ausmtTestResDir (":/ausmtsrc-test/");
+    foreach (const QString &fileName, ausmtTestResDir.entryList(QDir::Files)) {
+        QFile file (ausmtTestResDir.absoluteFilePath(fileName));
+        if (srcDir.exists(fileName)) {
+            QVERIFY(QFileInfo(srcDir.absoluteFilePath(fileName)).isFile());
+            QVERIFY(srcDir.remove(fileName));
+        }
+        QVERIFY(file.copy(srcDir.absoluteFilePath(fileName)));
+    }
+
+    // Make a better constants_root.sh
+    QFile constantsRoot (srcDir.absoluteFilePath(CONSTANTS_ROOT_SH));
+    QVERIFY(constantsRoot.open(QIODevice::WriteOnly));
+    QTextStream constantsRootStream (&constantsRoot);
+    constantsRootStream << QString("AUSMT_VAR_DIR=%1\n").arg(varDir.absolutePath());
+    constantsRootStream << QString("PATCH_ROOT_DIR=%1\n").arg(patchesDir.absolutePath());
+    constantsRootStream << QString("FILES_DIR=%1\n").arg(filesDir.absolutePath());
+    constantsRootStream << QString("NOTIFY_WRAPPER_EXEC=echo\n");
+    constantsRoot.close();
+
+    // Build AUSMT
+    QString buildName = srcDir.absoluteFilePath(BUILD_SH);
+    QFile build (buildName);
+    QVERIFY(build.exists());
+    QVERIFY(build.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser));
+    QProcess buildProcess;
+    buildProcess.setWorkingDirectory(srcDir.absolutePath());
+    buildProcess.start(PYTHON, QStringList() << buildName);
+    buildProcess.waitForFinished(-1);
+    QCOMPARE(buildProcess.exitCode(), 0);
+
+    foreach (const QString &fileName, dir.entryList(QDir::Files)) {
+        QFile file (dir.absoluteFilePath(fileName));
+        QVERIFY(file.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser));
+    }
+
+    // Remove src
+    QVERIFY(srcDir.removeRecursively());
+
+    // Dump patches
+    QDir patchesResDir (":/patches/");
+    foreach (const QString &fileName, patchesResDir.entryList(QDir::Files)) {
+        QFile file (patchesResDir.absoluteFilePath(fileName));
+        if (patchesDir.exists(fileName)) {
+            QVERIFY(QFileInfo(patchesDir.absoluteFilePath(fileName)).isFile());
+            QVERIFY(patchesDir.remove(fileName));
+        }
+        QVERIFY(file.copy(patchesDir.absoluteFilePath(fileName)));
+    }
+
+    foreach (const QString &dirName, patchesResDir.entryList(QDir::Dirs)) {
+        if (patchesDir.exists(dirName)) {
+            QVERIFY(QFileInfo(patchesDir.absoluteFilePath(dirName)).isDir());
+            QDir subDir (patchesDir);
+            QVERIFY(subDir.cd(dirName));
+            QVERIFY(subDir.removeRecursively());
+        }
+
+        patchesDir.mkdir(dirName);
+        QDir patchesSubDir (patchesDir);
+        QVERIFY(patchesSubDir.cd(dirName));
+
+        QDir patchesResSubDir (patchesResDir);
+        QVERIFY(patchesResSubDir.cd(dirName));
+
+        foreach (const QString &fileName, patchesResSubDir.entryList(QDir::Files)) {
+            QFile file (patchesResSubDir.absoluteFilePath(fileName));
+            QVERIFY(file.copy(patchesSubDir.absoluteFilePath(fileName)));
+        }
+    }
+
+    // Update patches
+    QString makePatchName = patchesDir.absoluteFilePath(MAKE_PATCH_SH);
+    QFile makePatch (makePatchName);
+    QVERIFY(makePatch.exists());
+    QVERIFY(makePatch.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser));
+    QProcess makePatchProcess;
+    makePatchProcess.setWorkingDirectory(patchesDir.absolutePath());
+    makePatchProcess.start(patchesDir.absoluteFilePath(MAKE_PATCH_SH),
+                           QStringList() << filesDir.absolutePath());
+    makePatchProcess.waitForFinished(-1);
+    QCOMPARE(makePatchProcess.exitCode(), 0);
 }
 
-bool TestAusmt::prepareSimple()
+void TestAusmt::prepareSimple()
 {
-    if (!clear()) {
-        return false;
+    GET_DIR;
+    GET_VAR_DIR;
+    GET_PATCHES_DIR;
+    GET_FILES_DIR;
+
+    if (varDir.exists()) {
+        QVERIFY(varDir.removeRecursively());
     }
 
-    if (!QFile::remove("/opt/ausmt/tests/files/simple.qml")) {
-        return false;
-    }
-    if (!QFile::copy("/opt/ausmt/tests/original/simple.qml",
-                        "/opt/ausmt/tests/files/simple.qml")) {
-        return false;
+    if (filesDir.exists()) {
+        QVERIFY(filesDir.removeRecursively());
     }
 
-    return true;
+    QVERIFY(QDir::root().mkpath(varDir.absolutePath()));
+    QVERIFY(QDir::root().mkpath(filesDir.absolutePath()));
+
+    QDir filesResDir (":/files");
+    foreach (const QString &fileName, filesResDir.entryList(QDir::Files))  {
+        QFile file (filesResDir.absoluteFilePath(fileName));
+        if (filesDir.exists(fileName)) {
+            QVERIFY(QFileInfo(filesDir.absoluteFilePath(fileName)).isFile());
+            QVERIFY(filesDir.remove(fileName));
+        }
+        QVERIFY(file.copy(filesDir.absoluteFilePath(fileName)));
+        QFile destFile (filesDir.absoluteFilePath(fileName));
+        QVERIFY(destFile.exists());
+        destFile.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser);
+    }
+
+    // Generate the md5sums
+    QString genMd5sumFile = filesDir.absoluteFilePath(GEN_MD5SUM_SH);
+    QFile genMd5sum (genMd5sumFile);
+    QVERIFY(genMd5sum.exists());
+    QVERIFY(genMd5sum.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser));
+    QProcess genMd5sumProcess;
+    genMd5sumProcess.setWorkingDirectory(filesDir.absolutePath());
+    genMd5sumProcess.start(filesDir.absoluteFilePath(GEN_MD5SUM_SH));
+    genMd5sumProcess.waitForFinished(-1);
+    QCOMPARE(genMd5sumProcess.exitCode(), 0);
+}
+
+void TestAusmt::checkSimple1Applied()
+{
+    GET_DIR;
+    GET_VAR_DIR;
+    GET_FILES_DIR;
+
+    // Check files
+    QFile file (filesDir.absoluteFilePath("simple.qml"));
+    QFile patched (":/patched/simple-patch1.qml");
+    QVERIFY(file .open(QIODevice::ReadOnly));
+    QVERIFY(patched .open(QIODevice::ReadOnly));
+    QCOMPARE(file .readAll(), patched .readAll());
+    file .close();
+    patched .close();
+
+    // Check orig
+    QVERIFY(QFile::exists(filesDir.absoluteFilePath("simple.qml.webosinternals.orig")));
+
+    // Check metadata
+    QFile packages (varDir.absoluteFilePath("packages"));
+    QVERIFY(packages.open(QIODevice::ReadOnly));
+    QList<QByteArray> allLines = packages.readAll().trimmed().split('\n');
+    packages.close();
+    QCOMPARE(allLines.count(), 1);
+    QCOMPARE(allLines.first(), QByteArray("simple-patch1 ausmt-sailfishos-1"));
+
+    QFile fileControl (varDir.absoluteFilePath("control/file_control"));
+    QVERIFY(fileControl.open(QIODevice::ReadOnly));
+    allLines = fileControl.readAll().trimmed().split('\n');
+    fileControl.close();
+    QCOMPARE(allLines.count(), 1);
+    QList<QByteArray> allEntries = allLines.first().split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("test"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
+
+    QFile fileMd5sums (varDir.absoluteFilePath("control/file_md5sums"));
+    QVERIFY(fileMd5sums.open(QIODevice::ReadOnly));
+    allLines = fileMd5sums.readAll().trimmed().split('\n');
+    fileMd5sums.close();
+    QCOMPARE(allLines.count(), 1);
+    allEntries = allLines.first().split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("simple-patch1"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
+    QCOMPARE(allEntries.at(2), QByteArray("62a1d5ed1773a6a8dec1f5d0be3de388"));
+}
+
+void TestAusmt::checkSimple2Applied()
+{
+    GET_DIR;
+    GET_VAR_DIR;
+    GET_FILES_DIR;
+
+    // Check files
+    QFile file (filesDir.absoluteFilePath("simple.qml"));
+    QFile patched (":/patched/simple-patch2.qml");
+    QVERIFY(file .open(QIODevice::ReadOnly));
+    QVERIFY(patched .open(QIODevice::ReadOnly));
+    QCOMPARE(file .readAll(), patched .readAll());
+    file .close();
+    patched .close();
+
+    // Check orig
+    QVERIFY(QFile::exists(filesDir.absoluteFilePath("simple.qml.webosinternals.orig")));
+
+    // Check metadata
+    QFile packages (varDir.absoluteFilePath("packages"));
+    QVERIFY(packages.open(QIODevice::ReadOnly));
+    QList<QByteArray> allLines = packages.readAll().trimmed().split('\n');
+    packages.close();
+    QCOMPARE(allLines.count(), 1);
+    QCOMPARE(allLines.first(), QByteArray("simple-patch2 ausmt-sailfishos-1"));
+
+    QFile fileControl (varDir.absoluteFilePath("control/file_control"));
+    QVERIFY(fileControl.open(QIODevice::ReadOnly));
+    allLines = fileControl.readAll().trimmed().split('\n');
+    fileControl.close();
+    QCOMPARE(allLines.count(), 1);
+    QList<QByteArray> allEntries = allLines.first().split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("test"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
+
+    QFile fileMd5sums (varDir.absoluteFilePath("control/file_md5sums"));
+    QVERIFY(fileMd5sums.open(QIODevice::ReadOnly));
+    allLines = fileMd5sums.readAll().trimmed().split('\n');
+    fileMd5sums.close();
+    QCOMPARE(allLines.count(), 1);
+    allEntries = allLines.first().split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("simple-patch2"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
+    QCOMPARE(allEntries.at(2), QByteArray("62a1d5ed1773a6a8dec1f5d0be3de388"));
+}
+
+void TestAusmt::checkSimple12Applied()
+{
+    GET_DIR;
+    GET_VAR_DIR;
+    GET_FILES_DIR;
+
+    // Check files
+    QFile file (filesDir.absoluteFilePath("simple.qml"));
+    QFile patched (":/patched/simple-patch12.qml");
+    QVERIFY(file .open(QIODevice::ReadOnly));
+    QVERIFY(patched .open(QIODevice::ReadOnly));
+    QCOMPARE(file .readAll(), patched .readAll());
+    file .close();
+    patched .close();
+
+    // Check orig
+    QVERIFY(QFile::exists(filesDir.absoluteFilePath("simple.qml.webosinternals.orig")));
+
+    // Check metadata
+    QFile packages (varDir.absoluteFilePath("packages"));
+    QVERIFY(packages.open(QIODevice::ReadOnly));
+    QList<QByteArray> allLines = packages.readAll().trimmed().split('\n');
+    packages.close();
+    QCOMPARE(allLines.count(), 2);
+    QCOMPARE(allLines.at(0), QByteArray("simple-patch1 ausmt-sailfishos-1"));
+    QCOMPARE(allLines.at(1), QByteArray("simple-patch2 ausmt-sailfishos-1"));
+
+    QFile fileControl (varDir.absoluteFilePath("control/file_control"));
+    QVERIFY(fileControl.open(QIODevice::ReadOnly));
+    allLines = fileControl.readAll().trimmed().split('\n');
+    fileControl.close();
+    QCOMPARE(allLines.count(), 1);
+    QList<QByteArray> allEntries = allLines.first().split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("test"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
+
+    QFile fileMd5sums (varDir.absoluteFilePath("control/file_md5sums"));
+    QVERIFY(fileMd5sums.open(QIODevice::ReadOnly));
+    allLines = fileMd5sums.readAll().trimmed().split('\n');
+    fileMd5sums.close();
+    QCOMPARE(allLines.count(), 2);
+    allEntries = allLines.at(0).split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("simple-patch1"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
+    QCOMPARE(allEntries.at(2), QByteArray("62a1d5ed1773a6a8dec1f5d0be3de388"));
+    allEntries = allLines.at(1).split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("simple-patch2"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
+    QCOMPARE(allEntries.at(2), QByteArray("62a1d5ed1773a6a8dec1f5d0be3de388"));
+}
+
+void TestAusmt::checkUnapplied()
+{
+    GET_DIR;
+    GET_VAR_DIR;
+    GET_FILES_DIR;
+
+    // Check files
+    QFile file (filesDir.absoluteFilePath("simple.qml"));
+    QFile original (":/files/simple.qml");
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(original.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), original.readAll());
+    file.close();
+    original.close();
+
+    // Check orig
+    QVERIFY(!QFile::exists(filesDir.absoluteFilePath("simple.qml.webosinternals.orig")));
+
+    // Check metadata
+    QFile packages (varDir.absoluteFilePath("packages"));
+    QVERIFY(packages.open(QIODevice::ReadOnly));
+    QVERIFY(packages.readAll().trimmed().isEmpty());
+    packages.close();
+
+
+    QFile fileControl (varDir.absoluteFilePath("control/file_control"));
+    QVERIFY(fileControl.open(QIODevice::ReadOnly));
+    QVERIFY(fileControl.readAll().trimmed().isEmpty());
+    fileControl.close();
+
+    QFile fileMd5sums (varDir.absoluteFilePath("control/file_md5sums"));
+    QVERIFY(fileMd5sums.open(QIODevice::ReadOnly));
+    QVERIFY(fileMd5sums.readAll().trimmed().isEmpty());
+    fileMd5sums.close();
 }
 
 void TestAusmt::testSimple()
 {
-    QVERIFY(prepareSimple());
+    prepareSimple();
+    GET_DIR;
 
     // Test the simple patch application stream (apply -> unapply)
 
     // Apply
-    int returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-install simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileApply ("/opt/ausmt/tests/files/simple.qml");
-    QFile patched ("/opt/ausmt/tests/patched/simple-patch1.qml");
-    QVERIFY(fileApply.open(QIODevice::ReadOnly));
-    QVERIFY(patched.open(QIODevice::ReadOnly));
-    QCOMPARE(fileApply.readAll(), patched.readAll());
-    fileApply.close();
-    patched.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
+    checkSimple1Applied();
 
     // Unapply
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-remove simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileUnapply ("/opt/ausmt/tests/files/simple.qml");
-    QFile original ("/opt/ausmt/tests/original/simple.qml");
-    QVERIFY(fileUnapply.open(QIODevice::ReadOnly));
-    QVERIFY(original.open(QIODevice::ReadOnly));
-    QCOMPARE(fileUnapply.readAll(), original.readAll());
-    fileUnapply.close();
-    original.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
+    checkUnapplied();
 }
 
 void TestAusmt::testReapply()
 {
-    QVERIFY(prepareSimple());
+    prepareSimple();
+    GET_DIR;
 
     // Test when you try to reapply or reunapply a patch
 
     // Apply
-    int returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-install simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileApply ("/opt/ausmt/tests/files/simple.qml");
-    QFile patched ("/opt/ausmt/tests/patched/simple-patch1.qml");
-    QVERIFY(fileApply.open(QIODevice::ReadOnly));
-    QVERIFY(patched.open(QIODevice::ReadOnly));
-    QCOMPARE(fileApply.readAll(), patched.readAll());
-    fileApply.close();
-    patched.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
+    checkSimple1Applied();
 
     // Reapply
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-install simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileApply2 ("/opt/ausmt/tests/files/simple.qml");
-    QFile patched2 ("/opt/ausmt/tests/patched/simple-patch1.qml");
-    QVERIFY(fileApply2.open(QIODevice::ReadOnly));
-    QVERIFY(patched2.open(QIODevice::ReadOnly));
-    QCOMPARE(fileApply2.readAll(), patched2.readAll());
-    fileApply2.close();
-    patched2.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
+    checkSimple1Applied();
 
     // Unapply
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-remove simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileUnapply ("/opt/ausmt/tests/files/simple.qml");
-    QFile original ("/opt/ausmt/tests/original/simple.qml");
-    QVERIFY(fileUnapply.open(QIODevice::ReadOnly));
-    QVERIFY(original.open(QIODevice::ReadOnly));
-    QCOMPARE(fileUnapply.readAll(), original.readAll());
-    fileUnapply.close();
-    original.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
+    checkUnapplied();
 
     // Reunapply
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-remove simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileUnapply2 ("/opt/ausmt/tests/files/simple.qml");
-    QFile original2 ("/opt/ausmt/tests/original/simple.qml");
-    QVERIFY(fileUnapply2.open(QIODevice::ReadOnly));
-    QVERIFY(original2.open(QIODevice::ReadOnly));
-    QCOMPARE(fileUnapply2.readAll(), original2.readAll());
-    fileUnapply2.close();
-    original2.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
+    checkUnapplied();
 }
 
 void TestAusmt::testExternalRemoved()
 {
-    QVERIFY(prepareSimple());
+    prepareSimple();
+    GET_DIR;
+    GET_FILES_DIR;
 
     // Test when external source applied or unapplied your patch
 
     // Perform a false apply (copy file from patched)
-    QVERIFY(QFile::remove("/opt/ausmt/tests/files/simple.qml"));
-    QVERIFY(QFile::copy("/opt/ausmt/tests/patched/simple-patch1.qml",
-                        "/opt/ausmt/tests/files/simple.qml"));
+    QVERIFY(QFile::remove(filesDir.absoluteFilePath("simple.qml")));
+    QVERIFY(QFile::copy(":/patched/simple-patch1.qml",
+                        filesDir.absoluteFilePath("simple.qml")));
 
     // Apply
-    int returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-install simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileApply ("/opt/ausmt/tests/files/simple.qml");
-    QFile patched ("/opt/ausmt/tests/patched/simple-patch1.qml");
-    QVERIFY(fileApply.open(QIODevice::ReadOnly));
-    QVERIFY(patched.open(QIODevice::ReadOnly));
-    QCOMPARE(fileApply.readAll(), patched.readAll());
-    fileApply.close();
-    patched.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
+    checkSimple1Applied();
 
     // Perform a false unapply (copy file from original)
-    QVERIFY(QFile::remove("/opt/ausmt/tests/files/simple.qml"));
-    QVERIFY(QFile::copy("/opt/ausmt/tests/original/simple.qml",
-                        "/opt/ausmt/tests/files/simple.qml"));
+    QVERIFY(QFile::remove(filesDir.absoluteFilePath("simple.qml")));
+    QVERIFY(QFile::copy(":/files/simple.qml",
+                        filesDir.absoluteFilePath("simple.qml")));
 
     // Unapply
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-remove simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileUnapply ("/opt/ausmt/tests/files/simple.qml");
-    QFile original ("/opt/ausmt/tests/original/simple.qml");
-    QVERIFY(fileUnapply.open(QIODevice::ReadOnly));
-    QVERIFY(original.open(QIODevice::ReadOnly));
-    QCOMPARE(fileUnapply.readAll(), original.readAll());
-    fileUnapply.close();
-    original.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
+    checkUnapplied();
 }
 
 void TestAusmt::test2Patches()
 {
-    QVERIFY(prepareSimple());
+    prepareSimple();
+    GET_DIR;
 
     // Test 2 patches application
     // Apply 1
-    int returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-install simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileApply1 ("/opt/ausmt/tests/files/simple.qml");
-    QFile patched1 ("/opt/ausmt/tests/patched/simple-patch1.qml");
-    QVERIFY(fileApply1.open(QIODevice::ReadOnly));
-    QVERIFY(patched1.open(QIODevice::ReadOnly));
-    QCOMPARE(fileApply1.readAll(), patched1.readAll());
-    fileApply1.close();
-    patched1.close();
-
-    // Check if orig is here
-    QVERIFY(QFile::exists("/opt/ausmt/tests/files/simple.qml.webosinternals.orig"));
-
-    // Also check the metadata
-    QFile packages1 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/packages");
-    QVERIFY(packages1.open(QIODevice::ReadOnly));
-    QList<QByteArray> allLines = packages1.readAll().trimmed().split('\n');
-    packages1.close();
-    QCOMPARE(allLines.count(), 1);
-    QCOMPARE(allLines.first(), QByteArray("simple-patch1 ausmt-sailfishos-1"));
-
-    QFile fileControl1 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_control");
-    QVERIFY(fileControl1.open(QIODevice::ReadOnly));
-    allLines = fileControl1.readAll().trimmed().split('\n');
-    fileControl1.close();
-    QCOMPARE(allLines.count(), 1);
-    QList<QByteArray> allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("ausmt-tests"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-
-    QFile fileMd5sums1 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_md5sums");
-    QVERIFY(fileMd5sums1.open(QIODevice::ReadOnly));
-    allLines = fileMd5sums1.readAll().trimmed().split('\n');
-    fileMd5sums1.close();
-    QCOMPARE(allLines.count(), 1);
-    allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("simple-patch1"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-    QCOMPARE(allEntries.at(2), QByteArray("e07833e21f2bfdabf1786b88d386f3f0985677ebda6f259013214022962469b1"));
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
+    checkSimple1Applied();
 
     // Apply 2
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-install simple-patch2");
-    QCOMPARE(returnCode, 0);
-    QFile fileApply2 ("/opt/ausmt/tests/files/simple.qml");
-    QFile patched2 ("/opt/ausmt/tests/patched/simple-patch12.qml");
-    QVERIFY(fileApply2.open(QIODevice::ReadOnly));
-    QVERIFY(patched2.open(QIODevice::ReadOnly));
-    QCOMPARE(fileApply2.readAll(), patched2.readAll());
-    fileApply2.close();
-    patched2.close();
-
-    // Check if orig is here
-    QVERIFY(QFile::exists("/opt/ausmt/tests/files/simple.qml.webosinternals.orig"));
-
-    // Also check the metadata
-    QFile packages2 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/packages");
-    QVERIFY(packages2.open(QIODevice::ReadOnly));
-    allLines = packages2.readAll().trimmed().split('\n');
-    packages2.close();
-    QCOMPARE(allLines.count(), 2);
-    QCOMPARE(allLines.at(0), QByteArray("simple-patch1 ausmt-sailfishos-1"));
-    QCOMPARE(allLines.at(1), QByteArray("simple-patch2 ausmt-sailfishos-1"));
-
-    QFile fileControl2 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_control");
-    QVERIFY(fileControl2.open(QIODevice::ReadOnly));
-    allLines = fileControl2.readAll().trimmed().split('\n');
-    fileControl2.close();
-    QCOMPARE(allLines.count(), 1);
-    allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("ausmt-tests"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-
-    QFile fileMd5sums2 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_md5sums");
-    QVERIFY(fileMd5sums2.open(QIODevice::ReadOnly));
-    allLines = fileMd5sums2.readAll().trimmed().split('\n');
-    fileMd5sums2.close();
-    QCOMPARE(allLines.count(), 2);
-    allEntries = allLines.at(0).split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("simple-patch1"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-    QCOMPARE(allEntries.at(2), QByteArray("e07833e21f2bfdabf1786b88d386f3f0985677ebda6f259013214022962469b1"));
-
-    allEntries = allLines.at(1).split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("simple-patch2"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-    QCOMPARE(allEntries.at(2), QByteArray("e07833e21f2bfdabf1786b88d386f3f0985677ebda6f259013214022962469b1"));
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch2"), 0);
+    checkSimple12Applied();
 
     // Unapply 2
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-remove simple-patch2");
-    QCOMPARE(returnCode, 0);
-    QFile fileUnapply2 ("/opt/ausmt/tests/files/simple.qml");
-    QFile unapplied ("/opt/ausmt/tests/patched/simple-patch1.qml");
-    QVERIFY(fileUnapply2.open(QIODevice::ReadOnly));
-    QVERIFY(unapplied.open(QIODevice::ReadOnly));
-    QCOMPARE(fileUnapply2.readAll(), unapplied.readAll());
-    fileUnapply2.close();
-    unapplied.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch2"), 0);
+    checkSimple1Applied();
 
-    // Check if orig is here
-    QVERIFY(QFile::exists("/opt/ausmt/tests/files/simple.qml.webosinternals.orig"));
-
-    // Also check the metadata
-    QFile packages3 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/packages");
-    QVERIFY(packages3.open(QIODevice::ReadOnly));
-    allLines = packages3.readAll().trimmed().split('\n');
-    packages3.close();
-    QCOMPARE(allLines.count(), 1);
-    QCOMPARE(allLines.first(), QByteArray("simple-patch1 ausmt-sailfishos-1"));
-
-    QFile fileControl3 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_control");
-    QVERIFY(fileControl3.open(QIODevice::ReadOnly));
-    allLines = fileControl3.readAll().trimmed().split('\n');
-    fileControl3.close();
-    QCOMPARE(allLines.count(), 1);
-    allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("ausmt-tests"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-
-    QFile fileMd5sums3 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_md5sums");
-    QVERIFY(fileMd5sums3.open(QIODevice::ReadOnly));
-    allLines = fileMd5sums3.readAll().trimmed().split('\n');
-    fileMd5sums3.close();
-    QCOMPARE(allLines.count(), 1);
-    allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("simple-patch1"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-    QCOMPARE(allEntries.at(2), QByteArray("e07833e21f2bfdabf1786b88d386f3f0985677ebda6f259013214022962469b1"));
-
-    // Unapply 2
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-remove simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileUnapply1 ("/opt/ausmt/tests/files/simple.qml");
-    QFile original ("/opt/ausmt/tests/original/simple.qml");
-    QVERIFY(fileUnapply1.open(QIODevice::ReadOnly));
-    QVERIFY(original.open(QIODevice::ReadOnly));
-    QCOMPARE(fileUnapply1.readAll(), original.readAll());
-    fileUnapply1.close();
-    original.close();
-
-    // Check if orig is removed
-    QVERIFY(!QFile::exists("/opt/ausmt/tests/files/simple.qml.webosinternals.orig"));
-
-    // Also check the metadata
-    QFile packages4 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/packages");
-    QVERIFY(packages4.readAll().trimmed().isEmpty());
-    packages4.close();
-
-
-    QFile fileControl4 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_control");
-    QVERIFY(fileControl4.open(QIODevice::ReadOnly));
-    QVERIFY(fileControl4.readAll().trimmed().isEmpty());
-    fileControl4.close();
-
-    QFile fileMd5sums4 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_md5sums");
-    QVERIFY(fileMd5sums4.open(QIODevice::ReadOnly));
-    QVERIFY(fileMd5sums4.readAll().trimmed().isEmpty());
-    fileMd5sums4.close();
+    // Unapply 1
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
+    checkUnapplied();
 }
 
 void TestAusmt::test2PatchesCrossed()
 {
-    QVERIFY(prepareSimple());
+    prepareSimple();
+    GET_DIR;
 
     // Test 2 patches application (crossed: 1 2 then unapply 1 2)
     // Apply 1
-    int returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-install simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileApply1 ("/opt/ausmt/tests/files/simple.qml");
-    QFile patched1 ("/opt/ausmt/tests/patched/simple-patch1.qml");
-    QVERIFY(fileApply1.open(QIODevice::ReadOnly));
-    QVERIFY(patched1.open(QIODevice::ReadOnly));
-    QCOMPARE(fileApply1.readAll(), patched1.readAll());
-    fileApply1.close();
-    patched1.close();
-
-    // Check if orig is here
-    QVERIFY(QFile::exists("/opt/ausmt/tests/files/simple.qml.webosinternals.orig"));
-
-    // Also check the metadata
-    QFile packages1 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/packages");
-    QVERIFY(packages1.open(QIODevice::ReadOnly));
-    QList<QByteArray> allLines = packages1.readAll().trimmed().split('\n');
-    packages1.close();
-    QCOMPARE(allLines.count(), 1);
-    QCOMPARE(allLines.first(), QByteArray("simple-patch1 ausmt-sailfishos-1"));
-
-    QFile fileControl1 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_control");
-    QVERIFY(fileControl1.open(QIODevice::ReadOnly));
-    allLines = fileControl1.readAll().trimmed().split('\n');
-    fileControl1.close();
-    QCOMPARE(allLines.count(), 1);
-    QList<QByteArray> allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("ausmt-tests"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-
-    QFile fileMd5sums1 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_md5sums");
-    QVERIFY(fileMd5sums1.open(QIODevice::ReadOnly));
-    allLines = fileMd5sums1.readAll().trimmed().split('\n');
-    fileMd5sums1.close();
-    QCOMPARE(allLines.count(), 1);
-    allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("simple-patch1"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-    QCOMPARE(allEntries.at(2), QByteArray("e07833e21f2bfdabf1786b88d386f3f0985677ebda6f259013214022962469b1"));
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
+    checkSimple1Applied();
 
     // Apply 2
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-install simple-patch2");
-    QCOMPARE(returnCode, 0);
-    QFile fileApply2 ("/opt/ausmt/tests/files/simple.qml");
-    QFile patched2 ("/opt/ausmt/tests/patched/simple-patch12.qml");
-    QVERIFY(fileApply2.open(QIODevice::ReadOnly));
-    QVERIFY(patched2.open(QIODevice::ReadOnly));
-    QCOMPARE(fileApply2.readAll(), patched2.readAll());
-    fileApply2.close();
-    patched2.close();
-
-    // Check if orig is here
-    QVERIFY(QFile::exists("/opt/ausmt/tests/files/simple.qml.webosinternals.orig"));
-
-    // Also check the metadata
-    QFile packages2 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/packages");
-    QVERIFY(packages2.open(QIODevice::ReadOnly));
-    allLines = packages2.readAll().trimmed().split('\n');
-    packages2.close();
-    QCOMPARE(allLines.count(), 2);
-    QCOMPARE(allLines.at(0), QByteArray("simple-patch1 ausmt-sailfishos-1"));
-    QCOMPARE(allLines.at(1), QByteArray("simple-patch2 ausmt-sailfishos-1"));
-
-    QFile fileControl2 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_control");
-    QVERIFY(fileControl2.open(QIODevice::ReadOnly));
-    allLines = fileControl2.readAll().trimmed().split('\n');
-    fileControl2.close();
-    QCOMPARE(allLines.count(), 1);
-    allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("ausmt-tests"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-
-    QFile fileMd5sums2 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_md5sums");
-    QVERIFY(fileMd5sums2.open(QIODevice::ReadOnly));
-    allLines = fileMd5sums2.readAll().trimmed().split('\n');
-    fileMd5sums2.close();
-    QCOMPARE(allLines.count(), 2);
-    allEntries = allLines.at(0).split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("simple-patch1"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-    QCOMPARE(allEntries.at(2), QByteArray("e07833e21f2bfdabf1786b88d386f3f0985677ebda6f259013214022962469b1"));
-
-    allEntries = allLines.at(1).split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("simple-patch2"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-    QCOMPARE(allEntries.at(2), QByteArray("e07833e21f2bfdabf1786b88d386f3f0985677ebda6f259013214022962469b1"));
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch2"), 0);
+    checkSimple12Applied();
 
     // Unapply 1
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-remove simple-patch1");
-    QCOMPARE(returnCode, 0);
-    QFile fileUnapply2 ("/opt/ausmt/tests/files/simple.qml");
-    QFile unapplied ("/opt/ausmt/tests/patched/simple-patch2.qml");
-    QVERIFY(fileUnapply2.open(QIODevice::ReadOnly));
-    QVERIFY(unapplied.open(QIODevice::ReadOnly));
-    QCOMPARE(fileUnapply2.readAll(), unapplied.readAll());
-    fileUnapply2.close();
-    unapplied.close();
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
+    checkSimple2Applied();
 
-    // Check if orig is here
-    QVERIFY(QFile::exists("/opt/ausmt/tests/files/simple.qml.webosinternals.orig"));
-
-    // Also check the metadata
-    QFile packages3 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/packages");
-    QVERIFY(packages3.open(QIODevice::ReadOnly));
-    allLines = packages3.readAll().trimmed().split('\n');
-    packages3.close();
-    QCOMPARE(allLines.count(), 1);
-    QCOMPARE(allLines.first(), QByteArray("simple-patch2 ausmt-sailfishos-1"));
-
-    QFile fileControl3 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_control");
-    QVERIFY(fileControl3.open(QIODevice::ReadOnly));
-    allLines = fileControl3.readAll().trimmed().split('\n');
-    fileControl3.close();
-    QCOMPARE(allLines.count(), 1);
-    allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("ausmt-tests"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-
-    QFile fileMd5sums3 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_md5sums");
-    QVERIFY(fileMd5sums3.open(QIODevice::ReadOnly));
-    allLines = fileMd5sums3.readAll().trimmed().split('\n');
-    fileMd5sums3.close();
-    QCOMPARE(allLines.count(), 1);
-    allEntries = allLines.first().split(' ');
-    QCOMPARE(allEntries.count(), 3);
-    QCOMPARE(allEntries.at(0), QByteArray("simple-patch2"));
-    QCOMPARE(allEntries.at(1), QByteArray("/opt/ausmt/tests/files/simple.qml"));
-    QCOMPARE(allEntries.at(2), QByteArray("e07833e21f2bfdabf1786b88d386f3f0985677ebda6f259013214022962469b1"));
-
-    // Unapply 1
-    returnCode = QProcess::execute("/opt/ausmt/tests/ausmt-remove simple-patch2");
-    QCOMPARE(returnCode, 0);
-    QFile fileUnapply1 ("/opt/ausmt/tests/files/simple.qml");
-    QFile original ("/opt/ausmt/tests/original/simple.qml");
-    QVERIFY(fileUnapply1.open(QIODevice::ReadOnly));
-    QVERIFY(original.open(QIODevice::ReadOnly));
-    QCOMPARE(fileUnapply1.readAll(), original.readAll());
-    fileUnapply1.close();
-    original.close();
-
-    // Check if orig is removed
-    QVERIFY(!QFile::exists("/opt/ausmt/tests/files/simple.qml.webosinternals.orig"));
-
-    // Also check the metadata
-    QFile packages4 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/packages");
-    QVERIFY(packages4.readAll().trimmed().isEmpty());
-    packages4.close();
-
-
-    QFile fileControl4 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_control");
-    QVERIFY(fileControl4.open(QIODevice::ReadOnly));
-    QVERIFY(fileControl4.readAll().trimmed().isEmpty());
-    fileControl4.close();
-
-    QFile fileMd5sums4 ("/opt/ausmt/tests/var/lib/patchmanager/ausmt/control/file_md5sums");
-    QVERIFY(fileMd5sums4.open(QIODevice::ReadOnly));
-    QVERIFY(fileMd5sums4.readAll().trimmed().isEmpty());
-    fileMd5sums4.close();
+    // Unapply 2
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch2"), 0);
+    checkUnapplied();
 }
 
 void TestAusmt::cleanupTestCase()
 {
-//    QVERIFY(clear());
+    // TODO: clear the test
 }
 
 QTEST_MAIN(TestAusmt)

@@ -4,33 +4,7 @@
 # Some constants
 # 
 
-# Root
-AUSMT_VAR_DIR=/var/lib/patchmanager/ausmt
-PATCH_ROOT_DIR=/usr/share/patchmanager/patches
-
-# Paths / Files
-AUSMT_CONTROL_DIR=${AUSMT_VAR_DIR}/control
-PATCH_DIR=${PATCH_ROOT_DIR}/${1}
-
-AUSMT_LOG_FILE=${AUSMT_VAR_DIR}/ausmt.log
-AUSMT_PACKAGES_LIST_FILE=${AUSMT_VAR_DIR}/packages
-AUSMT_CACHE_FILE=${AUSMT_VAR_DIR}/packages.cache
-AUSMT_PATCH_BACKUP_ROOT_DIR=${AUSMT_VAR_DIR}/patches
-AUSMT_PATCH_BACKUP_DIR=${AUSMT_PATCH_BACKUP_ROOT_DIR}/${1}
-
-LIPSTICK_FILE=/usr/bin/lipstick
-PANDORA_MD5SUMS_FILE=/opt/lipstick-pandora/md5sums
-
-# Constants
-PATCH_NAME=unified_diff.patch
-VERSION=ausmt-sailfishos-1
-
-# Applications
-MD5SUM_EXEC=/usr/bin/sha256sum
-RPM_EXEC=/bin/rpm
-PATCH_EXEC=/usr/bin/patch
-LSDIFF_EXEC=/usr/bin/lsdiff 
-NOTIFY_WRAPPER_EXEC=/opt/ausmt/ausmt-notify-wrapper
+#include constants.sh
 
 #
 # Here starts the part where all the magic happens
@@ -52,80 +26,13 @@ success_notify() {
   ${NOTIFY_WRAPPER_EXEC} rm ${PATCH_DIR}
 }
 
-failure() {
-  failure_unpatch
+#include finished.sh
 
-  echo | tee -a ${AUSMT_LOG_FILE}
-  echo "*** FAILED ***" | tee -a ${AUSMT_LOG_FILE}
-  echo | tee -a ${AUSMT_LOG_FILE}
+#include bck_file.sh
 
-  failure_notify
+#include utils.sh
 
-  rm -f $AUSMT_CACHE_FILE >/dev/null 2>&1
-
-#   mount -o ro,remount / | tee -a ${AUSMT_LOG_FILE} 1>&2
-
-  exit 1
-}
-
-success() {
-  echo | tee -a ${AUSMT_LOG_FILE}
-  echo "*** SUCCESS ***" | tee -a ${AUSMT_LOG_FILE}
-  echo | tee -a ${AUSMT_LOG_FILE}
-
-  success_notify
-
-  rm -f $AUSMT_CACHE_FILE >/dev/null 2>&1
-
-#   mount -o ro,remount / | tee -a ${AUSMT_LOG_FILE} 1>&2
-
-  exit 0
-}
-
-get_bck_file() {
-  bck_file=`dirname ${file}`"/."`basename ${file}`".orig"
-
-  if [ ! -f ${bck_file} ]; then
-    bck_file="${file}.webosinternals.orig"
-  fi
-}
-
-get_palm_md5sum() {
-  palm_md5sum=""
-  pkg_package=""
-  pkg_version=""
-
-  appid=`basename ${PATCH_DIR}`
-
-  if [ -f $AUSMT_CACHE_FILE ]; then
-    md5sums_line=`grep "^${file} " $AUSMT_CACHE_FILE`
-
-    palm_md5sum=`echo ${md5sums_line} | awk '{print $2}'`
-    pkg_package=`echo ${md5sums_line} | awk '{print $3}'`
-    pkg_version=`echo ${md5sums_line} | awk '{print $4}'`
-  fi
-}
-
-find_palm_md5sum() {
-  palm_md5sum=""
-  pkg_package=""
-  pkg_version=""
-
-  echo "Finding md5sum for original file" >> ${AUSMT_LOG_FILE}
-  echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
-
-  # We change from Palm, and use rpm to query the MD5 (or SHA256) sum
-  # Check if the file is in an RPM
-  if [ ! -z "$(${RPM_EXEC} -q --queryformat '[%{FILENAMES}\n]' -f ${file} | grep ^${file})" ]; then
-    pkg_package=$(${RPM_EXEC} -q --queryformat '%{NAME}' -f ${file} 2> /dev/null)
-    pkg_version=$(${RPM_EXEC} -q --queryformat '%{VERSION}-%{RELEASE}' -f ${file} 2> /dev/null)
-    palm_md5sum=$(${RPM_EXEC} -q --queryformat '[%{FILENAMES} %{FILEMD5S}\n]' -f ${file} | grep ${file} | awk '{print $2}' 2> /dev/null)
-  fi
-
-  if [ ! -z "${palm_md5sum}" ]; then
-    echo "${file} ${palm_md5sum} ${pkg_package} ${pkg_version}" >>$AUSMT_CACHE_FILE
-  fi
-}
+#include palm_md5sum.sh
 
 verify_text_patch() {
   if [ -f ${AUSMT_PATCH_BACKUP_DIR}/${PATCH_NAME} ]; then
@@ -418,3 +325,4 @@ clean_backup_patch
 success
 
 exit 0
+
