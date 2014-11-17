@@ -1,2 +1,2 @@
 TEMPLATE = aux
-system($$PWD/build)
+system($$PWD/build-ausmt.sh)

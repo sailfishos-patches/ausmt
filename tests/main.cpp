@@ -56,10 +56,12 @@ class TestAusmt: public QObject
 {
     Q_OBJECT
 private:
+    void generateFileMd5sums();
     void prepareSimple();
     void checkSimple1Applied();
     void checkSimple2Applied();
     void checkSimple12Applied();
+    void checkUnappliedMeta();
     void checkUnapplied();
 private slots:
     void initTestCase();
@@ -68,6 +70,8 @@ private slots:
     void testExternalRemoved();
     void test2Patches();
     void test2PatchesCrossed();
+    void testOTAModify();
+    void testOTARemove();
     void cleanupTestCase();
     // Need to write patch for unapplicable patches and conflicting ones
 };
@@ -209,11 +213,25 @@ void TestAusmt::initTestCase()
     QCOMPARE(makePatchProcess.exitCode(), 0);
 }
 
+void TestAusmt::generateFileMd5sums()
+{
+    GET_DIR;
+    GET_FILES_DIR;
+    QString genMd5sumFile = filesDir.absoluteFilePath(GEN_MD5SUM_SH);
+    QFile genMd5sum (genMd5sumFile);
+    QVERIFY(genMd5sum.exists());
+    QVERIFY(genMd5sum.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser));
+    QProcess genMd5sumProcess;
+    genMd5sumProcess.setWorkingDirectory(filesDir.absolutePath());
+    genMd5sumProcess.start(filesDir.absoluteFilePath(GEN_MD5SUM_SH));
+    genMd5sumProcess.waitForFinished(-1);
+    QCOMPARE(genMd5sumProcess.exitCode(), 0);
+}
+
 void TestAusmt::prepareSimple()
 {
     GET_DIR;
     GET_VAR_DIR;
-    GET_PATCHES_DIR;
     GET_FILES_DIR;
 
     if (varDir.exists()) {
@@ -240,16 +258,7 @@ void TestAusmt::prepareSimple()
         destFile.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser);
     }
 
-    // Generate the md5sums
-    QString genMd5sumFile = filesDir.absoluteFilePath(GEN_MD5SUM_SH);
-    QFile genMd5sum (genMd5sumFile);
-    QVERIFY(genMd5sum.exists());
-    QVERIFY(genMd5sum.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser));
-    QProcess genMd5sumProcess;
-    genMd5sumProcess.setWorkingDirectory(filesDir.absolutePath());
-    genMd5sumProcess.start(filesDir.absoluteFilePath(GEN_MD5SUM_SH));
-    genMd5sumProcess.waitForFinished(-1);
-    QCOMPARE(genMd5sumProcess.exitCode(), 0);
+    generateFileMd5sums();
 }
 
 void TestAusmt::checkSimple1Applied()
@@ -402,20 +411,12 @@ void TestAusmt::checkSimple12Applied()
     QCOMPARE(allEntries.at(2), QByteArray("62a1d5ed1773a6a8dec1f5d0be3de388"));
 }
 
-void TestAusmt::checkUnapplied()
+void TestAusmt::checkUnappliedMeta()
 {
     GET_DIR;
     GET_VAR_DIR;
     GET_FILES_DIR;
 
-    // Check files
-    QFile file (filesDir.absoluteFilePath("simple.qml"));
-    QFile original (":/files/simple.qml");
-    QVERIFY(file.open(QIODevice::ReadOnly));
-    QVERIFY(original.open(QIODevice::ReadOnly));
-    QCOMPARE(file.readAll(), original.readAll());
-    file.close();
-    original.close();
 
     // Check orig
     QVERIFY(!QFile::exists(filesDir.absoluteFilePath("simple.qml.webosinternals.orig")));
@@ -436,6 +437,23 @@ void TestAusmt::checkUnapplied()
     QVERIFY(fileMd5sums.open(QIODevice::ReadOnly));
     QVERIFY(fileMd5sums.readAll().trimmed().isEmpty());
     fileMd5sums.close();
+}
+
+void TestAusmt::checkUnapplied()
+{
+    GET_DIR;
+    GET_FILES_DIR;
+
+    // Check files
+    QFile file (filesDir.absoluteFilePath("simple.qml"));
+    QFile original (":/files/simple.qml");
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(original.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), original.readAll());
+    file.close();
+    original.close();
+
+    checkUnappliedMeta();
 }
 
 void TestAusmt::testSimple()
@@ -488,8 +506,10 @@ void TestAusmt::testExternalRemoved()
 
     // Perform a false apply (copy file from patched)
     QVERIFY(QFile::remove(filesDir.absoluteFilePath("simple.qml")));
-    QVERIFY(QFile::copy(":/patched/simple-patch1.qml",
-                        filesDir.absoluteFilePath("simple.qml")));
+    QVERIFY(QFile::copy(":/patched/simple-patch1.qml", filesDir.absoluteFilePath("simple.qml")));
+    QFile destFileApply (filesDir.absoluteFilePath("simple.qml"));
+    QVERIFY(destFileApply.exists());
+    destFileApply.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser);
 
     // Apply
     QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
@@ -497,8 +517,10 @@ void TestAusmt::testExternalRemoved()
 
     // Perform a false unapply (copy file from original)
     QVERIFY(QFile::remove(filesDir.absoluteFilePath("simple.qml")));
-    QVERIFY(QFile::copy(":/files/simple.qml",
-                        filesDir.absoluteFilePath("simple.qml")));
+    QVERIFY(QFile::copy(":/files/simple.qml", filesDir.absoluteFilePath("simple.qml")));
+    QFile destFileUnapply (filesDir.absoluteFilePath("simple.qml"));
+    QVERIFY(destFileUnapply.exists());
+    destFileUnapply.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser);
 
     // Unapply
     QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
@@ -511,6 +533,7 @@ void TestAusmt::test2Patches()
     GET_DIR;
 
     // Test 2 patches application
+
     // Apply 1
     QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
     checkSimple1Applied();
@@ -534,6 +557,7 @@ void TestAusmt::test2PatchesCrossed()
     GET_DIR;
 
     // Test 2 patches application (crossed: 1 2 then unapply 1 2)
+
     // Apply 1
     QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
     checkSimple1Applied();
@@ -549,6 +573,67 @@ void TestAusmt::test2PatchesCrossed()
     // Unapply 2
     QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch2"), 0);
     checkUnapplied();
+}
+
+void TestAusmt::testOTAModify()
+{
+    prepareSimple();
+    GET_DIR;
+    GET_FILES_DIR;
+
+    // An OTA update happened, modifying a patched file
+
+    // Apply
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
+    checkSimple1Applied();
+
+    // Copy the OTA file, and regen md5sums, to simulate the effect of an update
+    QVERIFY(QFile::remove(filesDir.absoluteFilePath("simple.qml")));
+    QVERIFY(QFile::copy(":/files/simple-ota.qml", filesDir.absoluteFilePath("simple.qml")));
+    QFile destFile (filesDir.absoluteFilePath("simple.qml"));
+    QVERIFY(destFile.exists());
+    destFile.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser);
+    generateFileMd5sums();
+
+    // Unapply
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
+
+    // Check files
+    QFile file (filesDir.absoluteFilePath("simple.qml"));
+    QFile original (":/files/simple-ota.qml");
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(original.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), original.readAll());
+    file.close();
+    original.close();
+
+    checkUnappliedMeta();
+}
+
+void TestAusmt::testOTARemove()
+{
+    prepareSimple();
+    GET_DIR;
+    GET_FILES_DIR;
+
+    // An OTA update happened, removing a patched file
+
+    // Apply
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
+    checkSimple1Applied();
+
+    // Remove the file and regen md5sums, to simulate the effect of an update
+    QVERIFY(QFile::remove(filesDir.absoluteFilePath("simple.qml")));
+    generateFileMd5sums();
+
+    // Unapply
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
+
+    // Check files
+    QFile file (filesDir.absoluteFilePath("simple.qml"));
+    QVERIFY(!file.exists());
+
+    checkUnappliedMeta();
 }
 
 void TestAusmt::cleanupTestCase()

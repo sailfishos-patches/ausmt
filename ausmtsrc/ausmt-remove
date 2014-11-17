@@ -78,11 +78,8 @@ verify_text_patch() {
 
         patch_already_unapplied="yes"
       else
-        FAIL_LIST=" "`${PATCH_EXEC} -s -f -R -p 1 -d / --dry-run < ${patch_file} 2>&1 | awk '{print "/"$12}' | sed s:".rej$":"":`
-
-        if [ "${FAIL_LIST}" = "${FILE_LIST}" ]; then
-          patch_already_unapplied="yes"
-        fi
+        FAIL_LIST=${FILE_LIST}
+        patch_already_unapplied="yes"
       fi
     fi
   fi
@@ -97,8 +94,8 @@ remove_text_patch() {
       echo "----------------------------------" | tee -a ${AUSMT_LOG_FILE}
       echo | tee -a ${AUSMT_LOG_FILE}
 
-      ${PATCH_EXEC} -R -p 1 -d / --no-backup-if-mismatch < ${patch_file} 2>&1 | tee -a ${AUSMT_LOG_FILE}
-
+      ${PATCH_EXEC} -R -p 1 -d / --no-backup-if-mismatch < ${patch_file} 2>&1 >> ${AUSMT_LOG_FILE}
+  
       if [ ${?} -ne 0 ]; then
         for file in `${LSDIFF_EXEC} --addprefix=/ --strip=1 ${patch_file}` ; do
           if [ -f ${file}.rej ]; then
@@ -120,41 +117,39 @@ check_ota_update() {
   for file in ${FILE_LIST} ; do
     if [ -f ${file} ]; then
       get_bck_file
+      get_palm_md5sum
 
-      if [ -f ${bck_file} ]; then
-        get_palm_md5sum
+      file_md5sum=`${MD5SUM_EXEC} ${file} | awk '{print $1}'`
+      orig_md5sum=`grep -h "${appid} ${file} " ${AUSMT_CONTROL_DIR}/file_md5sums | awk '{print $3}'`
 
-        file_md5sum=`${MD5SUM_EXEC} ${file} | awk '{print $1}'`
-
-        orig_md5sum=`grep -h "${appid} ${file} " ${AUSMT_CONTROL_DIR}/file_md5sums | awk '{print $3}'`
-
-        if [ -z "${palm_md5sum}" ]; then
-          CREATED_LIST="${CREATED_LIST} ${file}"
-        elif [ "${palm_md5sum}" = "${file_md5sum}" ] && [ ! -z "${file_md5sum}" ]; then
-          echo "File matches current md5sum, assuming OTA" >> ${AUSMT_LOG_FILE}
-          echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
-
-          cp -f ${file} ${bck_file}
-
-          FAIL_LIST="${FAIL_LIST# ${file}}"
-
-          RESTORE_LIST="${RESTORE_LIST} ${file}"
-        elif [ "${palm_md5sum}" != "${orig_md5sum}" ] && [ ! -z "${orig_md5sum}" ]; then
-          echo "The md5sum of file has changed, assuming OTA" >> ${AUSMT_LOG_FILE}
-          echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
-
-          cp -f ${file} ${bck_file}
-
-          FAIL_LIST="${FAIL_LIST# ${file}}"
-
-          RESTORE_LIST="${RESTORE_LIST} ${file}"
-        fi
-      else
-        echo "File has been completely removed, assuming OTA" >> ${AUSMT_LOG_FILE}
+      if [ -z "${palm_md5sum}" ]; then
+        CREATED_LIST="${CREATED_LIST} ${file}"
+      elif [ "${palm_md5sum}" = "${file_md5sum}" ] && [ ! -z "${file_md5sum}" ]; then
+        echo "File matches current md5sum, assuming OTA" >> ${AUSMT_LOG_FILE}
         echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
 
+        if [ -f ${bck_file} ]; then
+          cp -f ${file} ${bck_file}
+        fi
+
         FAIL_LIST="${FAIL_LIST# ${file}}"
+        RESTORE_LIST="${RESTORE_LIST} ${file}"
+      elif [ "${palm_md5sum}" != "${orig_md5sum}" ] && [ ! -z "${orig_md5sum}" ]; then
+        echo "The md5sum of file has changed, assuming OTA" >> ${AUSMT_LOG_FILE}
+        echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
+
+        if [ -f ${bck_file} ]; then
+          cp -f ${file} ${bck_file}
+        fi
+
+        FAIL_LIST="${FAIL_LIST# ${file}}"
+        RESTORE_LIST="${RESTORE_LIST} ${file}"
       fi
+    else
+      echo "File has been completely removed, assuming OTA" >> ${AUSMT_LOG_FILE}
+      echo "  file: ${file}" >> ${AUSMT_LOG_FILE}
+
+      FAIL_LIST="${FAIL_LIST# ${file}}"
     fi
   done
 
@@ -209,11 +204,8 @@ clean_backup_files() {
       orig_md5sum=`${MD5SUM_EXEC} ${bck_file} | awk '{print $1}'`
     fi
 
-    if [ ! -z "${palm_md5sum}" ]; then
-      tmpvar=`echo "${appid} ${file}" | tr '/' '.'`
-
-      sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_md5sums
-    fi
+    tmpvar=`echo "${appid} ${file}" | tr '/' '.'`
+    sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_md5sums
         
     if [ ! -f ${file} ] && [ ! -s ${bck_file} ] || \
        [ "${file_md5sum}" = "${orig_md5sum}" ] || [ "${file_md5sum}" = "${palm_md5sum}" ]
@@ -231,14 +223,8 @@ clean_backup_files() {
       fi
 
       tmpvar=`echo "${file}" | tr '/' '.'`
-
       sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_list
-      
-      if [ ! -z "${pkg_version}" ]; then
-        tmpvar=`echo "${pkg_package} ${file}" | tr '/' '.'`
-
-        sed -i -e /"^${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_control
-      fi
+      sed -i -e /" ${tmpvar} "/d ${AUSMT_CONTROL_DIR}/file_control
     fi
   done
 
