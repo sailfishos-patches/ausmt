@@ -61,6 +61,7 @@ private:
     void checkSimple1Applied();
     void checkSimple2Applied();
     void checkSimple12Applied();
+    void checkDoubleApplied();
     void checkUnappliedMeta();
     void checkUnapplied();
 private slots:
@@ -72,6 +73,8 @@ private slots:
     void test2PatchesCrossed();
     void testOTAModify();
     void testOTARemove();
+    void testOTAModifyDouble();
+    void testOTARemoveDouble();
     void cleanupTestCase();
     // Need to write patch for unapplicable patches and conflicting ones
 };
@@ -270,11 +273,11 @@ void TestAusmt::checkSimple1Applied()
     // Check files
     QFile file (filesDir.absoluteFilePath("simple.qml"));
     QFile patched (":/patched/simple-patch1.qml");
-    QVERIFY(file .open(QIODevice::ReadOnly));
+    QVERIFY(file.open(QIODevice::ReadOnly));
     QVERIFY(patched .open(QIODevice::ReadOnly));
-    QCOMPARE(file .readAll(), patched .readAll());
-    file .close();
-    patched .close();
+    QCOMPARE(file.readAll(), patched .readAll());
+    file.close();
+    patched.close();
 
     // Check orig
     QVERIFY(QFile::exists(filesDir.absoluteFilePath("simple.qml.webosinternals.orig")));
@@ -318,10 +321,10 @@ void TestAusmt::checkSimple2Applied()
     // Check files
     QFile file (filesDir.absoluteFilePath("simple.qml"));
     QFile patched (":/patched/simple-patch2.qml");
-    QVERIFY(file .open(QIODevice::ReadOnly));
-    QVERIFY(patched .open(QIODevice::ReadOnly));
-    QCOMPARE(file .readAll(), patched .readAll());
-    file .close();
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(patched.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), patched .readAll());
+    file.close();
     patched .close();
 
     // Check orig
@@ -366,11 +369,11 @@ void TestAusmt::checkSimple12Applied()
     // Check files
     QFile file (filesDir.absoluteFilePath("simple.qml"));
     QFile patched (":/patched/simple-patch12.qml");
-    QVERIFY(file .open(QIODevice::ReadOnly));
+    QVERIFY(file.open(QIODevice::ReadOnly));
     QVERIFY(patched .open(QIODevice::ReadOnly));
-    QCOMPARE(file .readAll(), patched .readAll());
-    file .close();
-    patched .close();
+    QCOMPARE(file.readAll(), patched .readAll());
+    file.close();
+    patched.close();
 
     // Check orig
     QVERIFY(QFile::exists(filesDir.absoluteFilePath("simple.qml.webosinternals.orig")));
@@ -407,6 +410,71 @@ void TestAusmt::checkSimple12Applied()
     allEntries = allLines.at(1).split(' ');
     QCOMPARE(allEntries.count(), 3);
     QCOMPARE(allEntries.at(0), QByteArray("simple-patch2"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
+    QCOMPARE(allEntries.at(2), QByteArray("62a1d5ed1773a6a8dec1f5d0be3de388"));
+}
+
+void TestAusmt::checkDoubleApplied()
+{
+    GET_DIR;
+    GET_VAR_DIR;
+    GET_FILES_DIR;
+
+    // Check files
+    QFile fileSimple (filesDir.absoluteFilePath("simple.qml"));
+    QFile patchedSimple (":/patched/simple-patch1.qml");
+    QVERIFY(fileSimple.open(QIODevice::ReadOnly));
+    QVERIFY(patchedSimple .open(QIODevice::ReadOnly));
+    QCOMPARE(fileSimple.readAll(), patchedSimple .readAll());
+    fileSimple.close();
+    patchedSimple.close();
+    QFile fileOther (filesDir.absoluteFilePath("other.qml"));
+    QFile patchedOther (":/patched/other-patch.qml");
+    QVERIFY(fileOther.open(QIODevice::ReadOnly));
+    QVERIFY(patchedOther .open(QIODevice::ReadOnly));
+    QCOMPARE(fileOther.readAll(), patchedOther .readAll());
+    fileOther.close();
+    patchedOther.close();
+
+    // Check orig
+    QVERIFY(QFile::exists(filesDir.absoluteFilePath("simple.qml.webosinternals.orig")));
+    QVERIFY(QFile::exists(filesDir.absoluteFilePath("other.qml.webosinternals.orig")));
+
+    // Check metadata
+    QFile packages (varDir.absoluteFilePath("packages"));
+    QVERIFY(packages.open(QIODevice::ReadOnly));
+    QList<QByteArray> allLines = packages.readAll().trimmed().split('\n');
+    packages.close();
+    QCOMPARE(allLines.count(), 1);
+    QCOMPARE(allLines.first(), QByteArray("double-patch ausmt-sailfishos-1"));
+
+    QFile fileControl (varDir.absoluteFilePath("control/file_control"));
+    QVERIFY(fileControl.open(QIODevice::ReadOnly));
+    allLines = fileControl.readAll().trimmed().split('\n');
+    fileControl.close();
+    QCOMPARE(allLines.count(), 2);
+    QList<QByteArray> allEntries = allLines.at(0).split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("test"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("other.qml").toLocal8Bit());
+    allEntries = allLines.at(1).split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("test"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
+
+    QFile fileMd5sums (varDir.absoluteFilePath("control/file_md5sums"));
+    QVERIFY(fileMd5sums.open(QIODevice::ReadOnly));
+    allLines = fileMd5sums.readAll().trimmed().split('\n');
+    fileMd5sums.close();
+    QCOMPARE(allLines.count(), 2);
+    allEntries = allLines.at(0).split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("double-patch"));
+    QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("other.qml").toLocal8Bit());
+    QCOMPARE(allEntries.at(2), QByteArray("805bec6be121a2ac7198f2f82b2395d9"));
+    allEntries = allLines.at(1).split(' ');
+    QCOMPARE(allEntries.count(), 3);
+    QCOMPARE(allEntries.at(0), QByteArray("double-patch"));
     QCOMPARE(allEntries.at(1), filesDir.absoluteFilePath("simple.qml").toLocal8Bit());
     QCOMPARE(allEntries.at(2), QByteArray("62a1d5ed1773a6a8dec1f5d0be3de388"));
 }
@@ -632,6 +700,89 @@ void TestAusmt::testOTARemove()
     // Check files
     QFile file (filesDir.absoluteFilePath("simple.qml"));
     QVERIFY(!file.exists());
+
+    checkUnappliedMeta();
+}
+
+void TestAusmt::testOTAModifyDouble()
+{
+    prepareSimple();
+    GET_DIR;
+    GET_FILES_DIR;
+
+    // An OTA update happened, modifying a patched file
+
+    // Apply
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "double-patch"), 0);
+    checkDoubleApplied();
+
+    // Copy the OTA file, and regen md5sums, to simulate the effect of an update
+    QVERIFY(QFile::remove(filesDir.absoluteFilePath("simple.qml")));
+    QVERIFY(QFile::copy(":/files/simple-ota.qml", filesDir.absoluteFilePath("simple.qml")));
+    QFile destFileSimple (filesDir.absoluteFilePath("simple.qml"));
+    QVERIFY(destFileSimple.exists());
+    destFileSimple.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser);
+    QVERIFY(QFile::remove(filesDir.absoluteFilePath("other.qml")));
+    QVERIFY(QFile::copy(":/files/other.qml", filesDir.absoluteFilePath("other.qml")));
+    QFile destFileOther (filesDir.absoluteFilePath("other.qml"));
+    QVERIFY(destFileOther.exists());
+    generateFileMd5sums();
+
+    // Unapply
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "double-patch"), 0);
+
+    // Check files
+    QFile fileSimple (filesDir.absoluteFilePath("simple.qml"));
+    QFile originalSimple (":/files/simple-ota.qml");
+    QVERIFY(fileSimple.open(QIODevice::ReadOnly));
+    QVERIFY(originalSimple.open(QIODevice::ReadOnly));
+    QCOMPARE(fileSimple.readAll(), originalSimple.readAll());
+    fileSimple.close();
+    originalSimple.close();
+    QFile fileOther (filesDir.absoluteFilePath("other.qml"));
+    QFile originalOther (":/files/other.qml");
+    QVERIFY(fileOther.open(QIODevice::ReadOnly));
+    QVERIFY(originalOther.open(QIODevice::ReadOnly));
+    QCOMPARE(fileOther.readAll(), originalOther.readAll());
+    fileOther.close();
+    originalOther.close();
+
+    checkUnappliedMeta();
+}
+
+void TestAusmt::testOTARemoveDouble()
+{
+    prepareSimple();
+    GET_DIR;
+    GET_FILES_DIR;
+
+    // An OTA update happened, modifying a patched file
+
+    // Apply
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "double-patch"), 0);
+    checkDoubleApplied();
+
+    // Remove the file, and regen md5sums, to simulate the effect of an update
+    QVERIFY(QFile::remove(filesDir.absoluteFilePath("simple.qml")));
+    QVERIFY(QFile::remove(filesDir.absoluteFilePath("other.qml")));
+    QVERIFY(QFile::copy(":/files/other.qml", filesDir.absoluteFilePath("other.qml")));
+    QFile destFileOther (filesDir.absoluteFilePath("other.qml"));
+    QVERIFY(destFileOther.exists());
+    generateFileMd5sums();
+
+    // Unapply
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "double-patch"), 0);
+
+    // Check files
+    QFile fileSimple (filesDir.absoluteFilePath("simple.qml"));
+    QVERIFY(!fileSimple.exists());
+    QFile fileOther (filesDir.absoluteFilePath("other.qml"));
+    QFile originalOther (":/files/other.qml");
+    QVERIFY(fileOther.open(QIODevice::ReadOnly));
+    QVERIFY(originalOther.open(QIODevice::ReadOnly));
+    QCOMPARE(fileOther.readAll(), originalOther.readAll());
+    fileOther.close();
+    originalOther.close();
 
     checkUnappliedMeta();
 }

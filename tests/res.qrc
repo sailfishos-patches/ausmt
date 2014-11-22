@@ -11,12 +11,15 @@
         <file>ausmtsrc-test/constants_exec.sh</file>
         <file>files/simple.qml</file>
         <file>files/simple-ota.qml</file>
+        <file>files/other.qml</file>
         <file>files/gen_md5sum.sh</file>
         <file>patches/make_patch.sh</file>
         <file>patches/simple-patch1/unified_diff.patch</file>
         <file>patches/simple-patch2/unified_diff.patch</file>
+        <file>patches/double-patch/unified_diff.patch</file>
         <file>patched/simple-patch1.qml</file>
         <file>patched/simple-patch2.qml</file>
         <file>patched/simple-patch12.qml</file>
+        <file>patched/other-patch.qml</file>
     </qresource>
 </RCC>
