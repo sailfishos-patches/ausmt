@@ -15,7 +15,7 @@
 #
 
 failure_unpatch() {
-  ${PATCH_EXEC} -s -p1 -R -d / --dry-run < ${PATCH_DIR}/${PATCH_NAME} | tee -a $PATCH_LOG 1>&2
+  ${PATCH_EXEC} -s -p1 -R -d / --dry-run < ${patch_file} | tee -a $PATCH_LOG 1>&2
 }
 
 failure_notify() {
@@ -34,13 +34,15 @@ success_notify() {
 
 #include palm_md5sum.sh
 
-verify_text_patch() {
+find_patch_file() {
   if [ -f ${AUSMT_PATCH_BACKUP_DIR}/${PATCH_NAME} ]; then
     patch_file=${AUSMT_PATCH_BACKUP_DIR}/${PATCH_NAME}
   else
     patch_file=${PATCH_DIR}/${PATCH_NAME}
   fi
+}
 
+verify_text_patch() {
   if [ -f ${patch_file} ]; then
     echo >> ${AUSMT_LOG_FILE}
     echo "----------------------------------" >> ${AUSMT_LOG_FILE}
@@ -253,6 +255,8 @@ if [ ! -f ${AUSMT_LOG_FILE} ]; then
   echo "*** Patch Log Created by Remove $(date) ***" > ${AUSMT_LOG_FILE}
 fi
 
+find_patch_file
+
 # mount -o rw,remount / | tee -a ${AUSMT_LOG_FILE} 1>&2
 
 echo >> ${AUSMT_LOG_FILE}
@@ -276,16 +280,6 @@ fi
 
 if [ ! -x ${LSDIFF_EXEC} ]; then
   echo "ERROR: Cannot find ${LSDIFF_EXEC}" | tee -a ${AUSMT_LOG_FILE} 1>&2
-  failure
-fi
-
-if [ -z ${PATCH_DIR} ]; then
-  echo "ERROR: PATCH_DIR must be given for removing" | tee -a ${AUSMT_LOG_FILE} 1>&2
-  failure
-fi
-
-if [ ! -d ${PATCH_DIR} ]; then
-  echo "ERROR: ${PATCH_DIR} is not a directory or does not exist!" | tee -a ${AUSMT_LOG_FILE} 1>&2
   failure
 fi
 

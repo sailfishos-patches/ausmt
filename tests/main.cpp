@@ -57,6 +57,7 @@ class TestAusmt: public QObject
     Q_OBJECT
 private:
     void generateFileMd5sums();
+    void preparePatches();
     void prepareSimple();
     void checkSimple1Applied();
     void checkSimple2Applied();
@@ -75,6 +76,7 @@ private slots:
     void testOTARemove();
     void testOTAModifyDouble();
     void testOTARemoveDouble();
+    void testUninstallRemove();
     void cleanupTestCase();
     // Need to write patch for unapplicable patches and conflicting ones
 };
@@ -118,8 +120,8 @@ void TestAusmt::initTestCase()
 
     GET_DIR;
     GET_VAR_DIR;
-    GET_PATCHES_DIR;
     GET_FILES_DIR;
+    GET_PATCHES_DIR;
 
     // Dump AUSMT into src dir
     QDir ausmtResDir (":/ausmtsrc/");
@@ -171,6 +173,31 @@ void TestAusmt::initTestCase()
     // Remove src
     QVERIFY(srcDir.removeRecursively());
 
+    // Prepare patches
+    preparePatches();
+}
+
+void TestAusmt::generateFileMd5sums()
+{
+    GET_DIR;
+    GET_FILES_DIR;
+    QString genMd5sumFile = filesDir.absoluteFilePath(GEN_MD5SUM_SH);
+    QFile genMd5sum (genMd5sumFile);
+    QVERIFY(genMd5sum.exists());
+    QVERIFY(genMd5sum.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser));
+    QProcess genMd5sumProcess;
+    genMd5sumProcess.setWorkingDirectory(filesDir.absolutePath());
+    genMd5sumProcess.start(filesDir.absoluteFilePath(GEN_MD5SUM_SH));
+    genMd5sumProcess.waitForFinished(-1);
+    QCOMPARE(genMd5sumProcess.exitCode(), 0);
+}
+
+void TestAusmt::preparePatches()
+{
+    GET_DIR;
+    GET_FILES_DIR;
+    GET_PATCHES_DIR;
+
     // Dump patches
     QDir patchesResDir (":/patches/");
     foreach (const QString &fileName, patchesResDir.entryList(QDir::Files)) {
@@ -214,21 +241,6 @@ void TestAusmt::initTestCase()
                            QStringList() << filesDir.absolutePath());
     makePatchProcess.waitForFinished(-1);
     QCOMPARE(makePatchProcess.exitCode(), 0);
-}
-
-void TestAusmt::generateFileMd5sums()
-{
-    GET_DIR;
-    GET_FILES_DIR;
-    QString genMd5sumFile = filesDir.absoluteFilePath(GEN_MD5SUM_SH);
-    QFile genMd5sum (genMd5sumFile);
-    QVERIFY(genMd5sum.exists());
-    QVERIFY(genMd5sum.setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser));
-    QProcess genMd5sumProcess;
-    genMd5sumProcess.setWorkingDirectory(filesDir.absolutePath());
-    genMd5sumProcess.start(filesDir.absoluteFilePath(GEN_MD5SUM_SH));
-    genMd5sumProcess.waitForFinished(-1);
-    QCOMPARE(genMd5sumProcess.exitCode(), 0);
 }
 
 void TestAusmt::prepareSimple()
@@ -785,6 +797,26 @@ void TestAusmt::testOTARemoveDouble()
     originalOther.close();
 
     checkUnappliedMeta();
+}
+
+void TestAusmt::testUninstallRemove()
+{
+    prepareSimple();
+    GET_DIR;
+    GET_FILES_DIR;
+    GET_PATCHES_DIR;
+
+    // The user uninstalled the patch package, and is trying to remove the patch
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_INSTALL), QStringList() << "simple-patch1"), 0);
+    checkSimple1Applied();
+
+    // Remove the installed patch
+    QDir simplePatchDir (patchesDir.absoluteFilePath("simple-patch1"));
+    QVERIFY(simplePatchDir.removeRecursively());
+
+    // Unapply
+    QCOMPARE(QProcess::execute(dir.absoluteFilePath(AUSMT_REMOVE), QStringList() << "simple-patch1"), 0);
+    checkUnapplied();
 }
 
 void TestAusmt::cleanupTestCase()
