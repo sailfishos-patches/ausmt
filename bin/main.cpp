@@ -35,7 +35,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
-#include <notification.h>
+#include "notification.h"
 
 static const char *PATCH_FILE = "patch.json";
 static const char *PATCHES_DIR = "/usr/share/patchmanager/patches";
