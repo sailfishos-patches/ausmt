@@ -3,11 +3,17 @@ TARGET = ausmt-notify
 
 QT = core dbus
 
-CONFIG += link_pkgconfig plugin
-PKGCONFIG += nemonotifications-qt5
+CONFIG += plugin
 
 SOURCES += \
-    main.cpp
+    main.cpp \
+    notification.cpp \
+    notificationmanagerproxy.cpp
+
+HEADERS += \
+    notification.h \
+    notificationmanagerproxy.h
+
 
 OTHER_FILES = ausmt-notify-wrapper
 
@@ -17,3 +23,4 @@ wrapper.path = /opt/ausmt
 
 INSTALLS += target wrapper
 
+system(qdbusxml2cpp org.freedesktop.Notifications.xml -p notificationmanagerproxy -c NotificationManagerProxy -i notification.h)
