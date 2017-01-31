@@ -5,7 +5,7 @@ failure() {
   echo "*** FAILED ***" | tee -a ${AUSMT_LOG_FILE}
   echo | tee -a ${AUSMT_LOG_FILE}
 
-  failure_notify
+#  failure_notify
 
   rm -f $AUSMT_CACHE_FILE >/dev/null 2>&1
 
@@ -19,7 +19,7 @@ success() {
   echo "*** SUCCESS ***" | tee -a ${AUSMT_LOG_FILE}
   echo | tee -a ${AUSMT_LOG_FILE}
 
-  success_notify
+#  success_notify
 
   rm -f $AUSMT_CACHE_FILE >/dev/null 2>&1
 
