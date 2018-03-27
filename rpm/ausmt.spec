@@ -15,6 +15,7 @@ Source0:    %{name}-%{version}.tar.bz2
 Requires:   rpm >= 4.9.0
 Requires:   patchutils
 Requires:   patch
+Conflicts:  patchmanager < 3
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Test)
 
