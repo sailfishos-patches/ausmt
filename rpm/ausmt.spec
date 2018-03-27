@@ -6,7 +6,7 @@ Name:       ausmt
 %{?qtc_builddir:%define _builddir %qtc_builddir}
 
 Summary:    AUSMT
-Version:    1.3.0
+Version:    1.4.0
 Release:    1
 Group:      Qt/Qt
 License:    TODO
@@ -15,6 +15,7 @@ Source0:    %{name}-%{version}.tar.bz2
 Requires:   rpm >= 4.9.0
 Requires:   patchutils
 Requires:   patch
+Conflicts:  patchmanager < 3
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Test)
 
