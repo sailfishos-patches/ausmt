@@ -41,7 +41,7 @@ NOTIFY_WRAPPER_EXEC=/opt/ausmt/ausmt-notify-wrapper
 #
 
 failure_unpatch() {
-  ${PATCH_EXEC} -s -p1 -R -d /tmp/patchmanager --dry-run < ${patch_file} | tee -a $PATCH_LOG 1>&2
+  ${PATCH_EXEC} -s -p1 -R -d /tmp/patchmanager --dry-run --fuzz=0 < ${patch_file} | tee -a $PATCH_LOG 1>&2
 }
 
 failure_notify() {
@@ -155,7 +155,7 @@ verify_text_patch() {
     echo "----------------------------------" >> ${AUSMT_LOG_FILE}
     echo >> ${AUSMT_LOG_FILE}
 
-    ${PATCH_EXEC} -f -R -p 1 -d /tmp/patchmanager --dry-run < ${patch_file} 2>&1 >> ${AUSMT_LOG_FILE}
+    ${PATCH_EXEC} -f -R -p 1 -d /tmp/patchmanager --dry-run --fuzz=0 < ${patch_file} 2>&1 >> ${AUSMT_LOG_FILE}
 
     if [ ${?} -ne 0 ]; then
       echo >> ${AUSMT_LOG_FILE}
@@ -164,7 +164,7 @@ verify_text_patch() {
       echo "----------------------------------" >> ${AUSMT_LOG_FILE}
       echo >> ${AUSMT_LOG_FILE}
 
-      ${PATCH_EXEC} -f -p 1 -d /tmp/patchmanager --dry-run < ${patch_file} 2>&1 >> ${AUSMT_LOG_FILE}
+      ${PATCH_EXEC} -f -p 1 -d /tmp/patchmanager --dry-run --fuzz=0 < ${patch_file} 2>&1 >> ${AUSMT_LOG_FILE}
 
       if [ ${?} -eq 0 ]; then
         echo | tee -a ${AUSMT_LOG_FILE}
@@ -191,7 +191,7 @@ remove_text_patch() {
       echo "----------------------------------" | tee -a ${AUSMT_LOG_FILE}
       echo | tee -a ${AUSMT_LOG_FILE}
 
-      ${PATCH_EXEC} -R -p 1 -d /tmp/patchmanager --no-backup-if-mismatch < ${patch_file} 2>&1 >> ${AUSMT_LOG_FILE}
+      ${PATCH_EXEC} -R -p 1 -d /tmp/patchmanager --fuzz=0 --no-backup-if-mismatch < ${patch_file} 2>&1 >> ${AUSMT_LOG_FILE}
 
       if [ ${?} -ne 0 ]; then
         for file in `${LSDIFF_EXEC} --addprefix=/ --strip=1 ${patch_file}` ; do
